@@ -8,6 +8,8 @@
 
 class USpringArmComponent;
 class UCameraComponent;
+class UInteractionComponent;
+class UInputAction;
 
 UCLASS()
 class TWODSURVIVAL_API ABaseCharacter : public ACharacter
@@ -22,6 +24,13 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	UCameraComponent* SideViewCamera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
+	UInteractionComponent* InteractionComponent;
+
+	// Assign IA_Interact in the Blueprint child class Details panel.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_Interact;
 
 protected:
 	virtual void BeginPlay() override;

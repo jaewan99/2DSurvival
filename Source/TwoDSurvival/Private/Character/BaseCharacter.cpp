@@ -5,6 +5,9 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Interaction/InteractionComponent.h"
+#include "EnhancedInputComponent.h"
+#include "InputAction.h"
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -33,6 +36,9 @@ ABaseCharacter::ABaseCharacter()
 	SideViewCamera->SetupAttachment(SpringArm, USpringArmComponent::SocketName);
 	SideViewCamera->bUsePawnControlRotation = false;
 
+	// Interaction component — handles proximity detection and hold-timer logic
+	InteractionComponent = CreateDefaultSubobject<UInteractionComponent>(TEXT("InteractionComponent"));
+
 	// Don't auto-rotate toward movement direction — MoveRight handles rotation
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 
@@ -55,6 +61,15 @@ void ABaseCharacter::Tick(float DeltaTime)
 void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	{
+		if (IA_Interact)
+		{
+			EIC->BindAction(IA_Interact, ETriggerEvent::Started,   InteractionComponent, &UInteractionComponent::StartInteract);
+			EIC->BindAction(IA_Interact, ETriggerEvent::Completed, InteractionComponent, &UInteractionComponent::StopInteract);
+		}
+	}
 }
 
 void ABaseCharacter::MoveRight(float Value)
