@@ -1,0 +1,40 @@
+# Build & generated
+Binaries
+Build
+DerivedDataCache
+Intermediate
+Saved
+Content
+
+# IDE files
+.vscode
+.vs
+.idea
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# Debug & compile artifacts
+*.pdb
+*.obj
+*.lib
+*.exp
+*.dll
+*.exe
+*.ilk
+*.ipch
+
+# Log files
+*.log
+
+# OS junk
+Thumbs.db
+.DS_Store
+
+# Compressed/packaged
+*.pak
