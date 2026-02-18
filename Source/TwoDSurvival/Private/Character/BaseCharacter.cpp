@@ -6,6 +6,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Interaction/InteractionComponent.h"
+#include "Inventory/InventoryComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 
@@ -39,6 +40,9 @@ ABaseCharacter::ABaseCharacter()
 	// Interaction component — handles proximity detection and hold-timer logic
 	InteractionComponent = CreateDefaultSubobject<UInteractionComponent>(TEXT("InteractionComponent"));
 
+	// Inventory component — holds the player's items
+	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
+
 	// Don't auto-rotate toward movement direction — MoveRight handles rotation
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 
@@ -68,6 +72,11 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		{
 			EIC->BindAction(IA_Interact, ETriggerEvent::Started,   InteractionComponent, &UInteractionComponent::StartInteract);
 			EIC->BindAction(IA_Interact, ETriggerEvent::Completed, InteractionComponent, &UInteractionComponent::StopInteract);
+		}
+
+		if (IA_ToggleInventory)
+		{
+			EIC->BindAction(IA_ToggleInventory, ETriggerEvent::Started, this, &ABaseCharacter::ToggleInventory);
 		}
 	}
 }

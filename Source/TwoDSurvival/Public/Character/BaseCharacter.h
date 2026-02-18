@@ -9,6 +9,7 @@
 class USpringArmComponent;
 class UCameraComponent;
 class UInteractionComponent;
+class UInventoryComponent;
 class UInputAction;
 
 UCLASS()
@@ -28,9 +29,16 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
 	UInteractionComponent* InteractionComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+	UInventoryComponent* InventoryComponent;
+
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* IA_Interact;
+
+	// Assign IA_ToggleInventory in the Blueprint child class Details panel.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_ToggleInventory;
 
 protected:
 	virtual void BeginPlay() override;
@@ -44,4 +52,29 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void MoveRight(float Value);
+
+	/**
+	 * Called when the player presses the Toggle Inventory key (I).
+	 * Override in BP_BaseCharacter to show/hide the inventory widget.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
+	void ToggleInventory();
+	virtual void ToggleInventory_Implementation() {}
+
+	/**
+	 * Called when a container interaction completes (e.g. hold E on a chest).
+	 * ContainerComp is the inventory component on the container actor.
+	 * Override in BP_BaseCharacter to show the player + container panels side by side.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
+	void OpenContainerInventory(UInventoryComponent* ContainerComp);
+	virtual void OpenContainerInventory_Implementation(UInventoryComponent* ContainerComp) {}
+
+	/**
+	 * Called to close the container panel (e.g. player walks away).
+	 * Override in BP_BaseCharacter to hide the container panel and restore input mode.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
+	void CloseContainerInventory();
+	virtual void CloseContainerInventory_Implementation() {}
 };

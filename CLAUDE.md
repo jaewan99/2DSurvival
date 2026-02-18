@@ -15,3 +15,8 @@ Whenever a task is completed, update `PROGRESS.md` at the project root by append
 - Any relevant notes
 
 Do NOT update PROGRESS.md automatically. Instead, ask the user for confirmation that the task is fully complete before adding it. A task may require multiple steps or iterations before it's done.
+
+## C++ / Blueprint Conventions
+
+- **BlueprintImplementableEvent** — can be overridden in Blueprint and called from C++, but is NOT reliably callable from OTHER Blueprints (e.g. a cabinet actor calling a function on the character).
+- **BlueprintNativeEvent + BlueprintCallable** — use this whenever a function needs to be BOTH callable from Blueprint (including external Blueprints) AND overridable in Blueprint. Always declare the `virtual void FunctionName_Implementation()` in the header with an empty body.
