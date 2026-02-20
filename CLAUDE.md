@@ -20,3 +20,13 @@ Do NOT update PROGRESS.md automatically. Instead, ask the user for confirmation 
 
 - **BlueprintImplementableEvent** — can be overridden in Blueprint and called from C++, but is NOT reliably callable from OTHER Blueprints (e.g. a cabinet actor calling a function on the character).
 - **BlueprintNativeEvent + BlueprintCallable** — use this whenever a function needs to be BOTH callable from Blueprint (including external Blueprints) AND overridable in Blueprint. Always declare the `virtual void FunctionName_Implementation()` in the header with an empty body.
+
+## UI Refresh Pattern (UMG Widgets)
+
+When building inventory/UI systems with dynamic data:
+- **Centralize refresh logic** — create ONE `RefreshAll()` function that updates all UI elements
+- **Use delegate bindings** — bind `OnInventoryChanged` (or similar C++ delegates) directly to `RefreshAll`
+- **Avoid scattered manual refresh calls** — let the delegate bindings handle updates automatically
+- This prevents bugs where UI shows stale data and makes the system easier to reason about
+
+Example: `WBP_InventoryWidget` has a single `RefreshAll()` that updates both player grid and container grid (if active). Both `InventoryComp->OnInventoryChanged` and `ContainerComp->OnInventoryChanged` are bound to call `RefreshAll()`. No manual refresh calls needed elsewhere.

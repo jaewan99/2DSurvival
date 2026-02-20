@@ -59,6 +59,8 @@ public:
 
 	/**
 	 * Swap (or merge) two slots.
+	 * - If both slots contain the same item type, merges them up to MaxStackSize (overflow remains in source).
+	 * - Otherwise, swaps the slots normally.
 	 * SlotA is on this component; SlotB is on OtherComp (may be the same component).
 	 * Broadcasts OnInventoryChanged on both components when they differ.
 	 */

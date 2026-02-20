@@ -153,3 +153,46 @@ Source/TwoDSurvival/
 - `OnInventoryChanged` must be `UPROPERTY(BlueprintAssignable)` — a `FSimpleDynamicMulticastDelegate`
 - Container actors do NOT need a C++ parent — plain Blueprint Actor with `UInventoryComponent` is sufficient
 - Slot count on `UInventoryComponent` should be set in DefaultsOnly — not changed at runtime
+
+---
+
+## Implementation Progress (as of 2025-02-20)
+
+### ✅ Completed
+- **C++ Foundation**:
+  - `UInventoryComponent` with slot array, TryAddItem, RemoveItem, SwapSlots
+  - `UItemDefinition` data asset
+  - `FInventorySlot` struct, `EItemCategory` enum, `FInventoryStartingItem` struct
+  - Added `InventoryComponent` to `ABaseCharacter`
+  - Input binding for `IA_ToggleInventory` (Tab key)
+  - `BlueprintNativeEvent` functions: `ToggleInventory`, `OpenContainerInventory`, `CloseContainerInventory`
+
+- **Blueprint/UMG**:
+  - `WBP_InventorySlot` — displays icon, quantity, background; supports drag-and-drop
+  - `WBP_InventoryWidget` — dual-panel (player + container grids)
+  - Centralized `RefreshAll()` pattern — single function refreshes both grids
+  - `OnInventoryChanged` delegate bindings automatically trigger `RefreshAll()`
+  - `BP_Cabinet` — container actor with `UInventoryComponent`, implements `IInteractable`
+  - Hold-to-interact first time, instant thereafter (tracks `bHasBeenOpened`)
+  - Auto-close container when player leaves cabinet collision range
+
+- **Drag and Drop**:
+  - `OnMouseButtonDown` → `Detect Drag If Pressed`
+  - `OnDragDetected` → creates `BP_InventoryDragDrop` with `FromComp` + `FromIndex`
+  - `OnDrop` → calls `SwapSlots` on both components (cross-inventory transfer works)
+
+- **Item Stacking**:
+  - `TryAddItem` fills existing partial stacks first before opening new slots
+  - `SwapSlots` intelligently merges same-item stacks up to MaxStackSize when dragging
+  - Overflow remains in source slot if destination fills up
+  - Different items or empty slots perform normal swap
+
+### ⏳ Pending
+- **Hotbar system** — `UHotbarComponent` not yet implemented
+- **Item usage** — no "use item" or "equip" functionality yet
+- **Persistence** — inventory state not saved between sessions
+
+### Key Learnings
+1. **Centralized refresh is critical** — scattered manual refresh calls lead to stale UI bugs. Use ONE `RefreshAll()` bound to delegates.
+2. **BlueprintNativeEvent + BlueprintCallable** — required for functions that need to be both callable from external Blueprints AND overridable.
+3. **Widget architecture** — keep data (InventoryComponent) in C++, UI logic (grids, bindings, refresh) in Blueprint widgets.

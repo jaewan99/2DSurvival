@@ -83,9 +83,43 @@ void UInventoryComponent::SwapSlots(int32 SlotA, UInventoryComponent* OtherComp,
 	if (!OtherComp) return;
 	if (!Slots.IsValidIndex(SlotA) || !OtherComp->Slots.IsValidIndex(SlotB)) return;
 
-	FInventorySlot Temp = Slots[SlotA];
-	Slots[SlotA] = OtherComp->Slots[SlotB];
-	OtherComp->Slots[SlotB] = Temp;
+	FInventorySlot& SourceSlot = Slots[SlotA];
+	FInventorySlot& DestSlot = OtherComp->Slots[SlotB];
+
+	// If both slots have the same item type, try to stack them
+	if (!SourceSlot.IsEmpty() && !DestSlot.IsEmpty() && SourceSlot.ItemDef == DestSlot.ItemDef)
+	{
+		const int32 MaxStack = SourceSlot.ItemDef->MaxStackSize;
+		const int32 SpaceInDest = MaxStack - DestSlot.Quantity;
+
+		if (SpaceInDest > 0)
+		{
+			// Transfer as much as possible from source to destination
+			const int32 AmountToTransfer = FMath::Min(SourceSlot.Quantity, SpaceInDest);
+			DestSlot.Quantity += AmountToTransfer;
+			SourceSlot.Quantity -= AmountToTransfer;
+
+			// Clear source slot if all items were transferred
+			if (SourceSlot.Quantity <= 0)
+			{
+				SourceSlot.ItemDef = nullptr;
+				SourceSlot.Quantity = 0;
+			}
+
+			OnInventoryChanged.Broadcast();
+			if (OtherComp != this)
+			{
+				OtherComp->OnInventoryChanged.Broadcast();
+			}
+			return;
+		}
+		// If destination is already full (SpaceInDest <= 0), fall through to normal swap
+	}
+
+	// Normal swap for different items or empty slots
+	FInventorySlot Temp = SourceSlot;
+	SourceSlot = DestSlot;
+	DestSlot = Temp;
 
 	OnInventoryChanged.Broadcast();
 	if (OtherComp != this)
