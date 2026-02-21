@@ -91,4 +91,12 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
 	void UseItem(int32 SlotIndex, UInventoryComponent* FromInventory);
 	virtual void UseItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory);
+
+	/**
+	 * Equip an item from the given inventory slot (e.g. move to hotbar).
+	 * Stub for now — implementation will be filled in when HotbarComponent is built.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
+	void EquipItem(int32 SlotIndex, UInventoryComponent* FromInventory);
+	virtual void EquipItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory) {}
 };
