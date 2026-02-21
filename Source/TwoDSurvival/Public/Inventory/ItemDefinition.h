@@ -39,6 +39,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	EItemCategory ItemCategory = EItemCategory::Misc;
 
+	// Amount of health restored when consumed (only relevant for Consumable category).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable", meta = (EditCondition = "ItemCategory == EItemCategory::Consumable"))
+	float HealthRestoreAmount = 0.f;
+
 	// If true, this item can be placed in the hotbar.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	bool bCanBeEquipped = false;

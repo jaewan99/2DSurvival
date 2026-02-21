@@ -9,6 +9,7 @@
 #include "Inventory/InventoryComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
+#include "Inventory/ItemDefinition.h"
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -79,6 +80,21 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 			EIC->BindAction(IA_ToggleInventory, ETriggerEvent::Started, this, &ABaseCharacter::ToggleInventory);
 		}
 	}
+}
+
+void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory)
+{
+	if (!FromInventory) return;
+
+	FInventorySlot Slot = FromInventory->GetSlot(SlotIndex);
+	if (Slot.IsEmpty() || !Slot.ItemDef) return;
+	if (Slot.ItemDef->ItemCategory != EItemCategory::Consumable) return;
+
+	Health = FMath::Clamp(Health + Slot.ItemDef->HealthRestoreAmount, 0.f, MaxHealth);
+	FromInventory->RemoveItem(SlotIndex, 1);
+
+	UE_LOG(LogTemp, Log, TEXT("Used %s — Health: %.0f / %.0f"),
+		*Slot.ItemDef->DisplayName.ToString(), Health, MaxHealth);
 }
 
 void ABaseCharacter::MoveRight(float Value)

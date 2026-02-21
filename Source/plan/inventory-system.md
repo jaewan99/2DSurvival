@@ -16,6 +16,7 @@ Each item is defined by a `UItemDefinition` data asset:
 | `Icon` | UTexture2D | Inventory icon |
 | `MaxStackSize` | int32 | Max units per slot (1 = not stackable) |
 | `ItemCategory` | EItemCategory | Weapon / Tool / Consumable / Resource / Misc |
+| `HealthRestoreAmount` | float | Health restored on use (Consumable only, EditCondition gated) |
 | `bCanBeEquipped` | bool | Whether it appears in the hotbar |
 
 ## Inventory Slot
@@ -165,7 +166,9 @@ Source/TwoDSurvival/
   - `FInventorySlot` struct, `EItemCategory` enum, `FInventoryStartingItem` struct
   - Added `InventoryComponent` to `ABaseCharacter`
   - Input binding for `IA_ToggleInventory` (Tab key)
-  - `BlueprintNativeEvent` functions: `ToggleInventory`, `OpenContainerInventory`, `CloseContainerInventory`
+  - `BlueprintNativeEvent` functions: `ToggleInventory`, `OpenContainerInventory(ContainerComp, ContainerActor)`, `CloseContainerInventory`
+  - `Health` / `MaxHealth` stats on `ABaseCharacter` (BlueprintReadWrite)
+  - `UseItem(SlotIndex, FromInventory)` BlueprintNativeEvent + BlueprintCallable — validates Consumable, applies `HealthRestoreAmount`, removes 1 unit
 
 - **Blueprint/UMG**:
   - `WBP_InventorySlot` — displays icon, quantity, background; supports drag-and-drop
@@ -173,7 +176,9 @@ Source/TwoDSurvival/
   - Centralized `RefreshAll()` pattern — single function refreshes both grids
   - `OnInventoryChanged` delegate bindings automatically trigger `RefreshAll()`
   - `BP_Cabinet` — container actor with `UInventoryComponent`, implements `IInteractable`
-  - Hold-to-interact first time, instant thereafter (tracks `bHasBeenOpened`)
+  - Hold-to-interact first time (`bInventoryOpen = false`), Instant on subsequent presses (`bInventoryOpen = true`)
+  - `OnInteract` passes `self` as `ContainerActor` to `OpenContainerInventory` — character stores it as `CurrentContainerActor`
+  - `bInventoryOpen` reset via `CurrentContainerActor` reference when Tab closes the inventory (call close logic from `ToggleInventory`)
   - Auto-close container when player leaves cabinet collision range
 
 - **Drag and Drop**:
@@ -188,11 +193,16 @@ Source/TwoDSurvival/
   - Different items or empty slots perform normal swap
 
 ### ⏳ Pending
+- **Context menu** (Blueprint only):
+  - `WBP_ContextMenu` — shows item description + "Use" button (hidden if not Consumable); full-screen backdrop closes on outside click
+  - `WBP_InventorySlot` right-click → create `WBP_ContextMenu` at mouse position, pass `InventoryComp`, `SlotIndex`, `SlotData`
 - **Hotbar system** — `UHotbarComponent` not yet implemented
-- **Item usage** — no "use item" or "equip" functionality yet
 - **Persistence** — inventory state not saved between sessions
 
 ### Key Learnings
 1. **Centralized refresh is critical** — scattered manual refresh calls lead to stale UI bugs. Use ONE `RefreshAll()` bound to delegates.
 2. **BlueprintNativeEvent + BlueprintCallable** — required for functions that need to be both callable from external Blueprints AND overridable.
 3. **Widget architecture** — keep data (InventoryComponent) in C++, UI logic (grids, bindings, refresh) in Blueprint widgets.
+4. **Input mode order matters** — call `Set Input Mode Game Only` BEFORE hiding/collapsing widgets, not after. Otherwise Slate routes the first keypress to the stale widget focus and drops it.
+5. **Container actor reference** — pass `ContainerActor` (self) into `OpenContainerInventory` so the character can store it as `CurrentContainerActor`. Use this reference to reset `bInventoryOpen` on the cabinet when Tab closes the inventory — avoids stale boolean state causing skipped interactions.
+6. **Set Visibility vs Remove from Parent** — widgets hidden via `Set Visibility` stay in the Slate hierarchy and can still hold focus. The input mode order fix (point 4) is especially important when using visibility instead of remove-from-parent.

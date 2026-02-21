@@ -32,6 +32,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
 	UInventoryComponent* InventoryComponent;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Stats")
+	float MaxHealth = 100.f;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Stats")
+	float Health = 100.f;
+
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* IA_Interact;
@@ -67,8 +73,8 @@ public:
 	 * Override in BP_BaseCharacter to show the player + container panels side by side.
 	 */
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
-	void OpenContainerInventory(UInventoryComponent* ContainerComp);
-	virtual void OpenContainerInventory_Implementation(UInventoryComponent* ContainerComp) {}
+	void OpenContainerInventory(UInventoryComponent* ContainerComp, AActor* ContainerActor);
+	virtual void OpenContainerInventory_Implementation(UInventoryComponent* ContainerComp, AActor* ContainerActor) {}
 
 	/**
 	 * Called to close the container panel (e.g. player walks away).
@@ -77,4 +83,12 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
 	void CloseContainerInventory();
 	virtual void CloseContainerInventory_Implementation() {}
+
+	/**
+	 * Consume a usable item from the given inventory slot.
+	 * Checks that the slot holds a Consumable, applies the effect, and removes one unit.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
+	void UseItem(int32 SlotIndex, UInventoryComponent* FromInventory);
+	virtual void UseItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory);
 };
