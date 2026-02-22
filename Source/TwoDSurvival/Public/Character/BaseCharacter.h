@@ -11,6 +11,7 @@ class UCameraComponent;
 class UInteractionComponent;
 class UInventoryComponent;
 class UInputAction;
+class AWeaponBase;
 
 UCLASS()
 class TWODSURVIVAL_API ABaseCharacter : public ACharacter
@@ -93,10 +94,26 @@ public:
 	virtual void UseItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory);
 
 	/**
-	 * Equip an item from the given inventory slot (e.g. move to hotbar).
-	 * Stub for now — implementation will be filled in when HotbarComponent is built.
+	 * Equips a weapon from the given inventory slot.
+	 * Spawns the weapon actor from ItemDef->WeaponActorClass and attaches it to WeaponSocketName.
+	 * Automatically unequips any previously equipped weapon first.
 	 */
-	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Weapon")
 	void EquipItem(int32 SlotIndex, UInventoryComponent* FromInventory);
-	virtual void EquipItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory) {}
+	virtual void EquipItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory);
+
+	/**
+	 * Unequips the current weapon — detaches and destroys the weapon actor.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Weapon")
+	void UnequipWeapon();
+	virtual void UnequipWeapon_Implementation();
+
+	// Socket name on the character mesh where the weapon attaches. Set in BP_BaseCharacter defaults.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
+	FName WeaponSocketName = FName("hand_r");
+
+	// Currently equipped weapon actor. Null if nothing is equipped.
+	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+	TObjectPtr<AWeaponBase> EquippedWeapon;
 };

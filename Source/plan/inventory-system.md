@@ -192,11 +192,17 @@ Source/TwoDSurvival/
   - Overflow remains in source slot if destination fills up
   - Different items or empty slots perform normal swap
 
+- **Context Menu** (2026-02-21):
+  - `EquipItem(SlotIndex, FromInventory)` BlueprintNativeEvent + BlueprintCallable added to `ABaseCharacter` — empty stub, wired up when HotbarComponent is built
+  - `WBP_ContextMenu` — Size Box root (not Canvas Panel), Vertical Box with `Btn_Use` + `Btn_Equip` (Collapsed by default)
+  - Buttons shown by category: Consumable → Use only; `bCanBeEquipped == true` → Equip only; Resource/Misc → no menu
+  - `WBP_InventorySlot` `OnMouseButtonDown` — right-click branch BEFORE existing `Detect Drag If Pressed`; calls `InventoryComp → GetSlot(SlotIndex)` to get slot data on demand
+  - Dismissal: `bIsFocusable = true` on `WBP_ContextMenu` + `Set Keyboard Focus (self)` in Event Construct + `On Focus Lost → Remove from Parent`
+  - Buttons inside menu: `Is Focusable = false` — prevents focus stealing before `OnClicked` fires
+  - Position: `Get Owning Player → Get Mouse Position On Viewport` + `Set Position in Viewport (bRemoveDPIScale: false)`
+
 ### ⏳ Pending
-- **Context menu** (Blueprint only):
-  - `WBP_ContextMenu` — shows item description + "Use" button (hidden if not Consumable); full-screen backdrop closes on outside click
-  - `WBP_InventorySlot` right-click → create `WBP_ContextMenu` at mouse position, pass `InventoryComp`, `SlotIndex`, `SlotData`
-- **Hotbar system** — `UHotbarComponent` not yet implemented
+- **Hotbar system** — `UHotbarComponent` not yet implemented; `EquipItem` stub ready to wire up
 - **Persistence** — inventory state not saved between sessions
 
 ### Key Learnings
@@ -206,3 +212,6 @@ Source/TwoDSurvival/
 4. **Input mode order matters** — call `Set Input Mode Game Only` BEFORE hiding/collapsing widgets, not after. Otherwise Slate routes the first keypress to the stale widget focus and drops it.
 5. **Container actor reference** — pass `ContainerActor` (self) into `OpenContainerInventory` so the character can store it as `CurrentContainerActor`. Use this reference to reset `bInventoryOpen` on the cabinet when Tab closes the inventory — avoids stale boolean state causing skipped interactions.
 6. **Set Visibility vs Remove from Parent** — widgets hidden via `Set Visibility` stay in the Slate hierarchy and can still hold focus. The input mode order fix (point 4) is especially important when using visibility instead of remove-from-parent.
+7. **Context menu focus pattern** — `bIsFocusable = true` on the menu widget + `Set Keyboard Focus (self)` in Event Construct enables `On Focus Lost` dismissal. Child buttons must have `Is Focusable = false` or focus transfers to them on click, firing `On Focus Lost` before `OnClicked`.
+8. **Viewport mouse position** — use `Get Owning Player → Get Mouse Position On Viewport` (NOT `Get Screen Space Position` from mouse event, NOT `Get Mouse Position` from Player Controller). Pair with `Set Position in Viewport (bRemoveDPIScale: false)`. `Get Screen Space Position` is widget-local space, not viewport space.
+9. **Slot data in widgets** — don't store a `SlotData` variable in slot widgets; call `InventoryComp → GetSlot(SlotIndex)` on demand to always get fresh data.

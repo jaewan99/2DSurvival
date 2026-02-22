@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Inventory/InventoryTypes.h"
+#include "Weapon/WeaponBase.h"
 #include "ItemDefinition.generated.h"
 
 /**
@@ -46,4 +47,9 @@ public:
 	// If true, this item can be placed in the hotbar.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	bool bCanBeEquipped = false;
+
+	// The weapon actor to spawn when this item is equipped. Only relevant for Weapon category.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Weapon",
+		meta = (EditCondition = "ItemCategory == EItemCategory::Weapon"))
+	TSubclassOf<AWeaponBase> WeaponActorClass;
 };

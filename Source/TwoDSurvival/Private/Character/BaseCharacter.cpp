@@ -10,6 +10,7 @@
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 #include "Inventory/ItemDefinition.h"
+#include "Weapon/WeaponBase.h"
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -95,6 +96,44 @@ void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent
 
 	UE_LOG(LogTemp, Log, TEXT("Used %s — Health: %.0f / %.0f"),
 		*Slot.ItemDef->DisplayName.ToString(), Health, MaxHealth);
+}
+
+void ABaseCharacter::EquipItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory)
+{
+	if (!FromInventory) return;
+
+	FInventorySlot Slot = FromInventory->GetSlot(SlotIndex);
+	if (Slot.IsEmpty() || !Slot.ItemDef) return;
+	if (Slot.ItemDef->ItemCategory != EItemCategory::Weapon) return;
+	if (!Slot.ItemDef->WeaponActorClass) return;
+
+	// Unequip any currently equipped weapon first
+	UnequipWeapon();
+
+	// Spawn the weapon actor and attach it to the character's hand socket
+	FActorSpawnParameters Params;
+	Params.Owner = this;
+	AWeaponBase* Weapon = GetWorld()->SpawnActor<AWeaponBase>(
+		Slot.ItemDef->WeaponActorClass, FTransform::Identity, Params);
+
+	if (Weapon)
+	{
+		Weapon->AttachToComponent(GetMesh(),
+			FAttachmentTransformRules::SnapToTargetIncludingScale,
+			WeaponSocketName);
+		EquippedWeapon = Weapon;
+
+		UE_LOG(LogTemp, Log, TEXT("Equipped: %s"), *Slot.ItemDef->DisplayName.ToString());
+	}
+}
+
+void ABaseCharacter::UnequipWeapon_Implementation()
+{
+	if (EquippedWeapon)
+	{
+		EquippedWeapon->Destroy();
+		EquippedWeapon = nullptr;
+	}
 }
 
 void ABaseCharacter::MoveRight(float Value)
