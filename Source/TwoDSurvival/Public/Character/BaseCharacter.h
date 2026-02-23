@@ -111,7 +111,7 @@ public:
 
 	// Socket name on the character mesh where the weapon attaches. Set in BP_BaseCharacter defaults.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
-	FName WeaponSocketName = FName("hand_r");
+	FName WeaponSocketName = FName("WeaponSocket");
 
 	// Currently equipped weapon actor. Null if nothing is equipped.
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
