@@ -80,6 +80,14 @@ float UHealthComponent::GetDamageMultiplier() const
 	return (Left + Right) * 0.5f;
 }
 
+void UHealthComponent::SetBodyPartHealth(EBodyPart Part, float NewCurrentHealth)
+{
+	FBodyPartHealth* Data = BodyParts.Find(Part);
+	if (!Data) return;
+
+	Data->CurrentHealth = FMath::Clamp(NewCurrentHealth, 0.f, Data->MaxHealth);
+}
+
 float UHealthComponent::GetMovementSpeedMultiplier() const
 {
 	const FBodyPartHealth* Left  = BodyParts.Find(EBodyPart::LeftLeg);

@@ -75,6 +75,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool IsFull() const;
 
+	// The original slot count before any backpack expansion.
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
+	int32 BaseSlotCount = 0;
+
+	/** Expand inventory by adding empty slots at the end. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void ExpandSlots(int32 Amount);
+
+	/** Shrink inventory by removing trailing slots. Returns false if those slots contain items. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool ShrinkSlots(int32 Amount);
+
+	/** Returns true if removing the item at SlotIndex would succeed (considers backpack shrink). */
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool CanRemoveItem(int32 SlotIndex) const;
+
 protected:
 	virtual void BeginPlay() override;
 };

@@ -11,6 +11,8 @@ class UCameraComponent;
 class UInteractionComponent;
 class UInventoryComponent;
 class UHealthComponent;
+class UHotbarComponent;
+class UItemDefinition;
 class UInputAction;
 class AWeaponBase;
 
@@ -39,6 +41,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health")
 	UHealthComponent* HealthComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hotbar")
+	UHotbarComponent* HotbarComponent;
+
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* IA_Interact;
@@ -46,6 +51,36 @@ public:
 	// Assign IA_ToggleInventory in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* IA_ToggleInventory;
+
+	// Assign IA_ToggleHealthUI in the Blueprint child class Details panel.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_ToggleHealthUI;
+
+	// Hotbar slot selection input actions (1-6). Assign in BP_BaseCharacter.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_HotbarSlot1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_HotbarSlot2;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_HotbarSlot3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_HotbarSlot4;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_HotbarSlot5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_HotbarSlot6;
+
+	// Hotbar scroll input actions. Assign in BP_BaseCharacter.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_HotbarScrollUp;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* IA_HotbarScrollDown;
 
 protected:
 	virtual void BeginPlay() override;
@@ -67,6 +102,14 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Inventory")
 	void ToggleInventory();
 	virtual void ToggleInventory_Implementation() {}
+
+	/**
+	 * Called when the player presses the Toggle Health UI key (H).
+	 * Override in BP_BaseCharacter to show/hide the health HUD widget.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "HUD")
+	void ToggleHealthUI();
+	virtual void ToggleHealthUI_Implementation() {}
 
 	/**
 	 * Called when a container interaction completes (e.g. hold E on a chest).
@@ -125,9 +168,45 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<AWeaponBase> EquippedWeapon;
 
+	// All item definitions in the game. Assign in BP_BaseCharacter for save/load lookup.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save")
+	TArray<UItemDefinition*> AllItemDefinitions;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save")
+	FString SaveSlotName = TEXT("SaveSlot0");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save")
+	int32 SaveUserIndex = 0;
+
+	/** Save all player state to disk. */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Save")
+	void SaveGame();
+	virtual void SaveGame_Implementation();
+
+	/** Load player state from disk. */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Save")
+	void LoadGame();
+	virtual void LoadGame_Implementation();
+
 private:
+	// Maps ItemID → ItemDefinition for fast lookup during load. Built in BeginPlay.
+	UPROPERTY()
+	TMap<FName, UItemDefinition*> ItemDefMap;
+
+	UItemDefinition* FindItemDefByID(FName ItemID) const;
+
 	// Bound to HealthComponent->OnBodyPartDamaged.
 	// Applies movement speed penalties for leg damage and triggers death for Head/Body.
 	UFUNCTION()
 	void OnBodyPartDamaged(EBodyPart Part, float CurrentHealth, float MaxHealth, bool bJustBroken);
+
+	// Hotbar input helpers
+	void SelectHotbarSlot1();
+	void SelectHotbarSlot2();
+	void SelectHotbarSlot3();
+	void SelectHotbarSlot4();
+	void SelectHotbarSlot5();
+	void SelectHotbarSlot6();
+	void HotbarScrollUp();
+	void HotbarScrollDown();
 };

@@ -69,6 +69,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	float GetMovementSpeedMultiplier() const;
 
+	// Directly set a body part's current health. Used by the save/load system.
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	void SetBodyPartHealth(EBodyPart Part, float NewCurrentHealth);
+
 protected:
 	virtual void BeginPlay() override;
 

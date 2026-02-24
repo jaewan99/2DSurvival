@@ -48,6 +48,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	bool bCanBeEquipped = false;
 
+	// Number of extra inventory slots this item provides when in inventory (e.g. backpack).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Equipment", meta = (ClampMin = 0))
+	int32 BonusSlots = 0;
+
 	// The weapon actor to spawn when this item is equipped. Only relevant for Weapon category.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Weapon",
 		meta = (EditCondition = "ItemCategory == EItemCategory::Weapon"))

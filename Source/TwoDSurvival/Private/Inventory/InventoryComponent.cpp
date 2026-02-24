@@ -14,6 +14,7 @@ void UInventoryComponent::BeginPlay()
 
 	// Pre-allocate all slots as empty.
 	Slots.SetNum(SlotCount);
+	BaseSlotCount = SlotCount;
 
 	for (const FInventoryStartingItem& Starting : StartingItems)
 	{
@@ -58,6 +59,12 @@ bool UInventoryComponent::TryAddItem(UItemDefinition* ItemDef, int32 Quantity)
 
 	if (Remaining < Quantity)
 	{
+		// If this item provides bonus inventory slots, expand now.
+		if (ItemDef->BonusSlots > 0)
+		{
+			ExpandSlots(ItemDef->BonusSlots);
+		}
+
 		OnInventoryChanged.Broadcast();
 	}
 
@@ -69,7 +76,20 @@ void UInventoryComponent::RemoveItem(int32 SlotIndex, int32 Quantity)
 	if (!Slots.IsValidIndex(SlotIndex) || Quantity <= 0) return;
 
 	FInventorySlot& Slot = Slots[SlotIndex];
-	Slot.Quantity = FMath::Max(0, Slot.Quantity - Quantity);
+	const int32 NewQuantity = FMath::Max(0, Slot.Quantity - Quantity);
+
+	// If this item provides bonus slots and will be fully removed, try to shrink first.
+	if (NewQuantity == 0 && Slot.ItemDef && Slot.ItemDef->BonusSlots > 0)
+	{
+		if (!ShrinkSlots(Slot.ItemDef->BonusSlots))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Cannot remove %s — bonus slots still contain items."),
+				*Slot.ItemDef->DisplayName.ToString());
+			return;
+		}
+	}
+
+	Slot.Quantity = NewQuantity;
 	if (Slot.Quantity == 0)
 	{
 		Slot.ItemDef = nullptr;
@@ -141,5 +161,61 @@ bool UInventoryComponent::IsFull() const
 		if (Slot.IsEmpty()) return false;
 		if (Slot.ItemDef && Slot.Quantity < Slot.ItemDef->MaxStackSize) return false;
 	}
+	return true;
+}
+
+void UInventoryComponent::ExpandSlots(int32 Amount)
+{
+	if (Amount <= 0) return;
+
+	Slots.SetNum(Slots.Num() + Amount);
+	SlotCount = Slots.Num();
+	OnInventoryChanged.Broadcast();
+}
+
+bool UInventoryComponent::ShrinkSlots(int32 Amount)
+{
+	if (Amount <= 0) return true;
+
+	const int32 CurrentCount = Slots.Num();
+	if (Amount > CurrentCount) return false;
+
+	// Check that the last N slots are empty.
+	for (int32 i = CurrentCount - Amount; i < CurrentCount; ++i)
+	{
+		if (!Slots[i].IsEmpty())
+		{
+			return false;
+		}
+	}
+
+	Slots.SetNum(CurrentCount - Amount);
+	SlotCount = Slots.Num();
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+bool UInventoryComponent::CanRemoveItem(int32 SlotIndex) const
+{
+	if (!Slots.IsValidIndex(SlotIndex)) return false;
+
+	const FInventorySlot& Slot = Slots[SlotIndex];
+	if (Slot.IsEmpty()) return true;
+	if (!Slot.ItemDef || Slot.ItemDef->BonusSlots <= 0) return true;
+
+	// If removing this item would shrink slots, check that trailing slots are empty.
+	if (Slot.Quantity <= 1)
+	{
+		const int32 BonusSlots = Slot.ItemDef->BonusSlots;
+		const int32 CurrentCount = Slots.Num();
+		for (int32 i = CurrentCount - BonusSlots; i < CurrentCount; ++i)
+		{
+			if (i != SlotIndex && !Slots[i].IsEmpty())
+			{
+				return false;
+			}
+		}
+	}
+
 	return true;
 }
