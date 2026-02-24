@@ -8,6 +8,7 @@
 
 class UStaticMeshComponent;
 class UBoxComponent;
+class UItemDefinition;
 
 /**
  * Base class for all equippable weapon actors.
@@ -33,4 +34,8 @@ public:
 	// Base damage dealt by this weapon.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
 	float BaseDamage = 10.f;
+
+	// The item definition this weapon was spawned from. Set automatically by EquipItem.
+	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+	TObjectPtr<UItemDefinition> SourceItemDef;
 };

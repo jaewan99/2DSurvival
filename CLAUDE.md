@@ -21,6 +21,22 @@ Do NOT update PROGRESS.md automatically. Instead, ask the user for confirmation 
 - **BlueprintImplementableEvent** — can be overridden in Blueprint and called from C++, but is NOT reliably callable from OTHER Blueprints (e.g. a cabinet actor calling a function on the character).
 - **BlueprintNativeEvent + BlueprintCallable** — use this whenever a function needs to be BOTH callable from Blueprint (including external Blueprints) AND overridable in Blueprint. Always declare the `virtual void FunctionName_Implementation()` in the header with an empty body.
 
+## Weapon Equip Pattern
+
+- `AWeaponBase` (C++) — base actor with `UStaticMeshComponent` (mesh) + `UBoxComponent` (hitbox, disabled by default) + `float BaseDamage` + `UItemDefinition* SourceItemDef`
+- Each weapon item definition has `TSubclassOf<AWeaponBase> WeaponActorClass` — set to the Blueprint subclass (e.g. `BP_WeaponSword`)
+- `EquipItem_Implementation` on `ABaseCharacter`: spawns `WeaponActorClass`, sets `SourceItemDef`, attaches to `WeaponSocketName` socket on character mesh
+- `SourceItemDef` on the spawned actor is how the context menu identifies whether a slot's weapon is currently equipped (compare `EquippedWeapon->SourceItemDef == SlotData.ItemDef`)
+- Socket name configured via `WeaponSocketName` (EditDefaultsOnly) on `BP_BaseCharacter` — create the socket in Skeleton editor
+
+## Context Menu Pattern (UMG)
+
+- Root is a `Size Box` (not Canvas Panel) — sized to content, positioned at cursor via `Set Position in Viewport`
+- Dismissal: `bIsFocusable = true` on the widget + `Set Keyboard Focus (self)` in Event Construct + `On Focus Lost → Remove from Parent`
+- Child buttons must have `Is Focusable = false` — otherwise clicking a button transfers focus first, firing `On Focus Lost` before `OnClicked`
+- Mouse position: `Get Owning Player → Get Mouse Position On Viewport` + `Set Position in Viewport (bRemoveDPIScale: false)`
+- Button visibility is category-driven — read `ItemCategory` and `bCanBeEquipped` from the slot's `ItemDef` in Event Construct
+
 ## UI Refresh Pattern (UMG Widgets)
 
 When building inventory/UI systems with dynamic data:

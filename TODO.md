@@ -6,7 +6,8 @@ Items are loosely ordered by priority / dependency.
 
 - [ ] **Weapon grip animation** — Layered Blend per Bone in AnimBP; blend a grip pose on upper body when `EquippedWeapon != null`. Needs one grip pose asset per weapon type created in Skeleton editor.
 - [ ] **Hotbar system** — `UHotbarComponent` (C++): 6 slots, active index, `OnHotbarChanged` delegate. `WBP_HotbarWidget`: always-visible row at bottom of screen, highlights active slot. Wire up `EquipItem` to move item to first free hotbar slot. Input: mouse wheel + 1–6 keys bound in C++.
-- [ ] **Unequip from context menu** — right-click equipped weapon → show Unequip button → calls `UnequipWeapon()`.
+- [x] **Unequip from context menu** — right-click equipped weapon → show Unequip button → calls `UnequipWeapon()`.
+- [ ] **Blueprint: add Unequip button to WBP_ContextMenu** — add `Btn_Unequip` (Collapsed by default) to Vertical Box; update Event Construct to show Unequip when `EquippedWeapon.SourceItemDef == SlotData.ItemDef`; `Btn_Unequip OnClicked` → `UnequipWeapon()` → `Remove from Parent`.
 - [ ] **Backpack** — `int32 BonusSlots` on `UItemDefinition`, `ExpandSlots`/`ShrinkSlots` on `UInventoryComponent`. Equip backpack → expands player inventory. Needs hotbar done first (same Equip flow).
 - [ ] **Item tooltip** — hover over an inventory slot → show item name + description in a small floating widget.
 - [ ] **Persistence** — save/load inventory and equipped weapon state between sessions using `USaveGame`.

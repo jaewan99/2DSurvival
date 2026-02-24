@@ -73,10 +73,11 @@ void UInteractionComponent::StartInteract()
 		HoldElapsed = 0.f;
 		InteractionProgress = 0.f;
 
-		// Lock movement for the duration of the hold.
-		if (ACharacter* Char = Cast<ACharacter>(GetOwner()))
+		// Block player input movement for the duration of the hold.
+		// Does NOT disable gravity — character still falls naturally if airborne.
+		if (ABaseCharacter* BC = Cast<ABaseCharacter>(GetOwner()))
 		{
-			Char->GetCharacterMovement()->DisableMovement();
+			BC->bMovementLocked = true;
 		}
 	}
 }
@@ -175,10 +176,10 @@ void UInteractionComponent::CompleteInteraction()
 	InteractionProgress = 0.f;
 	HoldElapsed = 0.f;
 
-	// Restore movement.
-	if (ACharacter* Char = Cast<ACharacter>(GetOwner()))
+	// Restore player input movement.
+	if (ABaseCharacter* BC = Cast<ABaseCharacter>(GetOwner()))
 	{
-		Char->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		BC->bMovementLocked = false;
 	}
 }
 
@@ -188,9 +189,9 @@ void UInteractionComponent::CancelInteraction()
 	InteractionProgress = 0.f;
 	HoldElapsed = 0.f;
 
-	// Restore movement.
-	if (ACharacter* Char = Cast<ACharacter>(GetOwner()))
+	// Restore player input movement.
+	if (ABaseCharacter* BC = Cast<ABaseCharacter>(GetOwner()))
 	{
-		Char->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		BC->bMovementLocked = false;
 	}
 }

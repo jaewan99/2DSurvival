@@ -7,6 +7,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Interaction/InteractionComponent.h"
 #include "Inventory/InventoryComponent.h"
+#include "Character/HealthComponent.h"
+#include "Character/HealthTypes.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 #include "Inventory/ItemDefinition.h"
@@ -45,6 +47,9 @@ ABaseCharacter::ABaseCharacter()
 	// Inventory component — holds the player's items
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
 
+	// Health component — per-body-part health pools
+	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
+
 	// Don't auto-rotate toward movement direction — MoveRight handles rotation
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 
@@ -57,6 +62,12 @@ ABaseCharacter::ABaseCharacter()
 void ABaseCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Store the default walk speed so leg damage can scale it relative to this base.
+	BaseWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+
+	// React to body part damage — adjust movement speed and trigger death.
+	HealthComponent->OnBodyPartDamaged.AddDynamic(this, &ABaseCharacter::OnBodyPartDamaged);
 }
 
 void ABaseCharacter::Tick(float DeltaTime)
@@ -91,11 +102,12 @@ void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent
 	if (Slot.IsEmpty() || !Slot.ItemDef) return;
 	if (Slot.ItemDef->ItemCategory != EItemCategory::Consumable) return;
 
-	Health = FMath::Clamp(Health + Slot.ItemDef->HealthRestoreAmount, 0.f, MaxHealth);
+	HealthComponent->RestoreHealth(EBodyPart::Body, Slot.ItemDef->HealthRestoreAmount);
 	FromInventory->RemoveItem(SlotIndex, 1);
 
-	UE_LOG(LogTemp, Log, TEXT("Used %s — Health: %.0f / %.0f"),
-		*Slot.ItemDef->DisplayName.ToString(), Health, MaxHealth);
+	const FBodyPartHealth BodyPart = HealthComponent->GetBodyPart(EBodyPart::Body);
+	UE_LOG(LogTemp, Log, TEXT("Used %s — Body Health: %.0f / %.0f"),
+		*Slot.ItemDef->DisplayName.ToString(), BodyPart.CurrentHealth, BodyPart.MaxHealth);
 }
 
 void ABaseCharacter::EquipItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory)
@@ -118,6 +130,7 @@ void ABaseCharacter::EquipItem_Implementation(int32 SlotIndex, UInventoryCompone
 
 	if (Weapon)
 	{
+		Weapon->SourceItemDef = Slot.ItemDef;
 		Weapon->AttachToComponent(GetMesh(),
 			FAttachmentTransformRules::SnapToTargetIncludingScale,
 			WeaponSocketName);
@@ -136,8 +149,25 @@ void ABaseCharacter::UnequipWeapon_Implementation()
 	}
 }
 
+void ABaseCharacter::OnBodyPartDamaged(EBodyPart Part, float CurrentHealth, float MaxHealth, bool bJustBroken)
+{
+	// Recalculate movement speed whenever a leg takes damage.
+	if (Part == EBodyPart::LeftLeg || Part == EBodyPart::RightLeg)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * HealthComponent->GetMovementSpeedMultiplier();
+	}
+
+	// Broadcast death if a vital part (Head or Body) just reached 0.
+	if (bJustBroken && (Part == EBodyPart::Head || Part == EBodyPart::Body))
+	{
+		HealthComponent->OnDeath.Broadcast();
+	}
+}
+
 void ABaseCharacter::MoveRight(float Value)
 {
+	if (bMovementLocked) return;
+
 	if (FMath::Abs(Value) > KINDA_SMALL_NUMBER)
 	{
 		// Set controller rotation to face movement direction — the AnimBP reads from this

@@ -105,5 +105,6 @@ Source/TwoDSurvival/
 
 ### Key gotchas
 - `StartInteract` has an `if (bIsInteracting) return` guard — prevents the timer restarting if input fires more than once mid-hold
-- Movement is locked via `DisableMovement()` on hold start, restored via `SetMovementMode(MOVE_Walking)` on complete/cancel
+- ~~Movement is locked via `DisableMovement()` on hold start~~ — **DO NOT use `DisableMovement()`**, it sets movement mode to `MOVE_None` which disables gravity and causes the character to hang in mid-air if interacting while airborne
+- **Movement lock pattern**: use `bMovementLocked = true` on `ABaseCharacter` instead. `MoveRight` checks this flag and returns early. Gravity and physics still apply normally. Clear the flag on complete/cancel.
 - `StopInteract` is a no-op if `bIsInteracting` is false — safe to call on every key release including after natural completion

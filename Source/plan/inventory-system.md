@@ -215,3 +215,9 @@ Source/TwoDSurvival/
 7. **Context menu focus pattern** — `bIsFocusable = true` on the menu widget + `Set Keyboard Focus (self)` in Event Construct enables `On Focus Lost` dismissal. Child buttons must have `Is Focusable = false` or focus transfers to them on click, firing `On Focus Lost` before `OnClicked`.
 8. **Viewport mouse position** — use `Get Owning Player → Get Mouse Position On Viewport` (NOT `Get Screen Space Position` from mouse event, NOT `Get Mouse Position` from Player Controller). Pair with `Set Position in Viewport (bRemoveDPIScale: false)`. `Get Screen Space Position` is widget-local space, not viewport space.
 9. **Slot data in widgets** — don't store a `SlotData` variable in slot widgets; call `InventoryComp → GetSlot(SlotIndex)` on demand to always get fresh data.
+
+### Troubleshooting
+
+**Context menu buttons not responding to clicks (menu closes instead)**
+- **Cause**: Buttons inside the context menu have `Is Focusable = true` (default). Clicking a focusable button steals keyboard focus from the UserWidget *before* `OnClicked` fires, triggering `On Focus Lost → Remove from Parent` and destroying the widget before the click registers.
+- **Fix**: Select each button inside `WBP_ContextMenu` → Details panel → uncheck **Is Focusable**. The UserWidget (`bIsFocusable = true`) retains focus, `On Focus Lost` only fires when clicking truly outside the menu, and `OnClicked` fires normally.

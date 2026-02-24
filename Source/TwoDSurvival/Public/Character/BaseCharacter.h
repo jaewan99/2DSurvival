@@ -10,8 +10,11 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInteractionComponent;
 class UInventoryComponent;
+class UHealthComponent;
 class UInputAction;
 class AWeaponBase;
+
+enum class EBodyPart : uint8;
 
 UCLASS()
 class TWODSURVIVAL_API ABaseCharacter : public ACharacter
@@ -33,11 +36,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
 	UInventoryComponent* InventoryComponent;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Stats")
-	float MaxHealth = 100.f;
-
-	UPROPERTY(BlueprintReadWrite, Category = "Stats")
-	float Health = 100.f;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health")
+	UHealthComponent* HealthComponent;
 
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -109,11 +109,25 @@ public:
 	void UnequipWeapon();
 	virtual void UnequipWeapon_Implementation();
 
+	// When true, player-driven horizontal movement input is ignored (hold interaction in progress).
+	// Gravity and physics still apply normally.
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	bool bMovementLocked = false;
+
+	// Walk speed stored at BeginPlay — used to restore speed after leg-damage penalty recalculation.
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	float BaseWalkSpeed = 0.f;
+
 	// Socket name on the character mesh where the weapon attaches. Set in BP_BaseCharacter defaults.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
 	FName WeaponSocketName = FName("WeaponSocket");
-
 	// Currently equipped weapon actor. Null if nothing is equipped.
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<AWeaponBase> EquippedWeapon;
+
+private:
+	// Bound to HealthComponent->OnBodyPartDamaged.
+	// Applies movement speed penalties for leg damage and triggers death for Head/Body.
+	UFUNCTION()
+	void OnBodyPartDamaged(EBodyPart Part, float CurrentHealth, float MaxHealth, bool bJustBroken);
 };
