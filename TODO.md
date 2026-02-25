@@ -6,24 +6,19 @@ Items are loosely ordered by priority / dependency.
 
 - [ ] **Weapon grip animation** — Layered Blend per Bone in AnimBP; blend a grip pose on upper body when `EquippedWeapon != null`. Needs one grip pose asset per weapon type created in Skeleton editor.
 - [x] **Hotbar system (C++)** — `UHotbarComponent` on BaseCharacter, 6 slots, active index, `OnHotbarChanged` delegate, SelectSlot/CycleSlot, input bindings in BaseCharacter.
+- [x] **Hotbar widget (C++)** — `UHotbarWidget` builds 6 slots dynamically in NativeConstruct (border + icon + key label). Gold highlight on active slot. Always visible at bottom of screen.
 - [x] **Unequip from context menu** — right-click equipped weapon → show Unequip button → calls `UnequipWeapon()`.
 - [x] **Blueprint: add Unequip button to WBP_ContextMenu** — add `Btn_Unequip` (Collapsed by default) to Vertical Box; update Event Construct to show Unequip when `EquippedWeapon.SourceItemDef == SlotData.ItemDef`; `Btn_Unequip OnClicked` → `UnequipWeapon()` → `Remove from Parent`.
 - [x] **Backpack (C++)** — `BonusSlots` on `UItemDefinition`, `ExpandSlots`/`ShrinkSlots`/`CanRemoveItem` on `UInventoryComponent`. Auto-expands on add, blocks removal if bonus slots occupied.
 - [x] **Item tooltip (C++)** — `UItemTooltipWidget` with BindWidget text blocks, `SetItemDef()` populates name/desc/stats/icon.
-- [x] **Persistence (C++)** — `UTwoDSurvivalSaveGame`, `SaveGame`/`LoadGame` on BaseCharacter, `SetBodyPartHealth` on HealthComponent. Serializes inventory, hotbar, health, position.
+- [x] **Persistence (C++)** — `UTwoDSurvivalSaveGame`, `SaveGame`/`LoadGame` on BaseCharacter, `SetBodyPartHealth` on HealthComponent. Serializes inventory, hotbar, health, position. F5 = save, F9 = load (programmatic input).
 
-### Blueprint Wiring Steps (after C++ compile)
+### Remaining Blueprint Wiring
 
-- [ ] **1. Hotbar Input Actions** — Create 8 Input Action assets in Content Browser: `IA_HotbarSlot1` through `IA_HotbarSlot6`, `IA_HotbarScrollUp`, `IA_HotbarScrollDown`. All Digital (bool), NO triggers on the asset.
-- [ ] **2. IMC Bindings** — Open the Input Mapping Context and add: keys `1`–`6` → `IA_HotbarSlot1`–`IA_HotbarSlot6`, `Mouse Wheel Up` → `IA_HotbarScrollUp`, `Mouse Wheel Down` → `IA_HotbarScrollDown`.
-- [ ] **3. BP_BaseCharacter: Assign Input Actions** — In `BP_BaseCharacter` Details, assign all 8 new IA assets to `IA_HotbarSlot1`–`IA_HotbarSlot6`, `IA_HotbarScrollUp`, `IA_HotbarScrollDown`.
-- [ ] **4. BP_BaseCharacter: AllItemDefinitions** — In `BP_BaseCharacter` Details → Save category, populate the `AllItemDefinitions` array with every `UItemDefinition` data asset in the project (needed for save/load).
-- [ ] **5. WBP_ItemTooltip** — Create a Widget Blueprint with parent class `UItemTooltipWidget`. Add Text Blocks named exactly: `ItemNameText`, `DescriptionText`, `StatsText`. Optionally add an Image named `IconImage`. Style as desired.
-- [ ] **6. Hook Tooltip to Inventory Slots** — In `WBP_InventorySlot`: On Mouse Enter → create/show `WBP_ItemTooltip`, call `SetItemDef(SlotData.ItemDef)`, position near cursor. On Mouse Leave → remove tooltip from parent.
-- [ ] **7. WBP_HotbarWidget** — Create a Widget Blueprint: horizontal box with 6 slot images/borders. Bind `OnHotbarChanged` delegate to refresh all 6 slots (read `HotbarComponent->GetHotbarSlotItem(i)`). Highlight the active slot (`ActiveSlotIndex`). Add to viewport in BP_BaseCharacter BeginPlay.
-- [ ] **8. Context Menu: Assign to Hotbar** — In `WBP_ContextMenu`, add a `Btn_AssignHotbar` button (Is Focusable = false). Show for items with `bCanBeEquipped = true` or `ItemCategory == Consumable`. OnClicked → call `HotbarComponent->AssignToHotbar(ItemDef, ActiveSlotIndex)` → Remove from Parent.
-- [ ] **9. Backpack Test Asset** — Create a new `UItemDefinition` data asset for a backpack item: set `BonusSlots = 4`, choose an icon. Add to a container or starting items for testing.
-- [ ] **10. Save/Load UI** — Wire `SaveGame`/`LoadGame` to a key or pause menu button for testing (e.g. F5 to save, F9 to load).
+- [x] **WBP_ItemTooltip** — Create Widget Blueprint (parent: `UItemTooltipWidget`). Add TextBlocks named `ItemNameText`, `DescriptionText`, `StatsText`. Optionally add Image named `IconImage`. Style as desired.
+- [x] **Hook tooltip to inventory slots** — In `WBP_InventorySlot`: Mouse Enter → create `WBP_ItemTooltip`, call `SetItemDef(SlotData.ItemDef)`, position near cursor. Mouse Leave → remove from parent. Right-click removes tooltip before opening context menu.
+- [x] **Context menu: Assign to Hotbar** — Add `Btn_AssignHotbar` button (Is Focusable = false) to `WBP_ContextMenu`. Show for Weapon/Consumable. OnClicked → `HotbarComponent->AssignToHotbar(ItemDef, ActiveSlotIndex)` → Remove from Parent.
+- [x] **Backpack test asset** — Created `DA_Backpack` `UItemDefinition` with `BonusSlots = 4`.
 
 ## World / Interaction
 
@@ -31,10 +26,8 @@ Items are loosely ordered by priority / dependency.
 
 ## Health
 
-- [x] **Health system (C++)** — `UHealthComponent` with per-body-part pools (`EBodyPart`), `OnBodyPartDamaged` delegate, `OnDeath` delegate, movement/damage multipliers. Integrated into `ABaseCharacter` — leg damage slows movement, head/body at 0 fires death.
-- [x] **Health HUD input (C++)** — `IA_ToggleHealthUI` property + `ToggleHealthUI` BlueprintNativeEvent on `ABaseCharacter`, bound in `SetupPlayerInputComponent`. Compiled clean.
-- [ ] **Health HUD Blueprint** — `WBP_BodyPartRow` (label + progress bar + BROKEN text, `SetData` function with color logic) + `WBP_HealthHUD` (draggable panel, all 6 body part rows, delegate-driven `RefreshAll`). Full steps in `Source/plan/health-system.md`.
-- [ ] **BP_BaseCharacter wiring** — assign `IA_ToggleHealthUI` asset, add H key to IMC, add `HealthHUDWidget` variable, override `ToggleHealthUI` to toggle widget.
+- [x] **Health system (C++)** — `UHealthComponent` with per-body-part pools (`EBodyPart`), `OnBodyPartDamaged` delegate, `OnDeath` delegate, movement/damage multipliers. Integrated into `ABaseCharacter`.
+- [x] **Health HUD (C++ + Blueprint)** — `UBodyPartRowWidget` + `UHealthHUDWidget`. Draggable panel, 6 color-coded body part rows, delegate-driven refresh. Toggle with H key. `FInputModeGameAndUI` on open.
 
 ## Combat
 
