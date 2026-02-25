@@ -21,6 +21,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UI/HealthHUDWidget.h"
 #include "UI/HotbarWidget.h"
+#include "Combat/DamageableInterface.h"
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -90,6 +91,7 @@ void ABaseCharacter::CreateInputActions()
 	IA_HotbarScrollDown = MakeAction(TEXT("IA_HotbarScrollDown"));
 	IA_SaveGameAction = MakeAction(TEXT("IA_SaveGame"));
 	IA_LoadGameAction = MakeAction(TEXT("IA_LoadGame"));
+	IA_Attack         = MakeAction(TEXT("IA_Attack"));
 
 	// Create mapping context and bind keys
 	GameplayIMC = NewObject<UInputMappingContext>(this, TEXT("GameplayIMC"));
@@ -104,6 +106,7 @@ void ABaseCharacter::CreateInputActions()
 	GameplayIMC->MapKey(IA_HotbarScrollDown, EKeys::MouseScrollDown);
 	GameplayIMC->MapKey(IA_SaveGameAction, EKeys::F5);
 	GameplayIMC->MapKey(IA_LoadGameAction, EKeys::F9);
+	GameplayIMC->MapKey(IA_Attack,         EKeys::LeftMouseButton);
 }
 
 void ABaseCharacter::ScanItemDefinitions()
@@ -208,6 +211,9 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		// Save/Load (F5/F9)
 		EIC->BindAction(IA_SaveGameAction, ETriggerEvent::Started, this, &ABaseCharacter::OnSaveGamePressed);
 		EIC->BindAction(IA_LoadGameAction, ETriggerEvent::Started, this, &ABaseCharacter::OnLoadGamePressed);
+
+		// Attack (LMB)
+		EIC->BindAction(IA_Attack, ETriggerEvent::Started, this, &ABaseCharacter::OnAttackPressed);
 	}
 }
 
@@ -483,6 +489,68 @@ void ABaseCharacter::HotbarScrollUp() { HotbarComponent->CycleSlot(-1); }
 void ABaseCharacter::HotbarScrollDown() { HotbarComponent->CycleSlot(1); }
 void ABaseCharacter::OnSaveGamePressed() { SaveGame(); }
 void ABaseCharacter::OnLoadGamePressed() { LoadGame(); }
+
+void ABaseCharacter::OnAttackPressed()
+{
+	if (bIsAttacking) return;
+
+	bIsAttacking = true;
+
+	if (EquippedWeapon)
+	{
+		// Armed attack — play the weapon's own montage and enable its hitbox
+		if (EquippedWeapon->AttackMontage)
+		{
+			PlayAnimMontage(EquippedWeapon->AttackMontage);
+		}
+		const float DamageMultiplier = HealthComponent->GetDamageMultiplier();
+		EquippedWeapon->BeginAttack(DamageMultiplier);
+	}
+	else
+	{
+		// Unarmed — play punch montage, then do a delayed sphere sweep for hit detection
+		if (UnarmedAttackMontage)
+		{
+			PlayAnimMontage(UnarmedAttackMontage);
+		}
+		GetWorldTimerManager().SetTimer(
+			UnarmedHitTimer, this, &ABaseCharacter::PerformUnarmedHit, UnarmedHitDelay, false);
+	}
+
+	// Reset the attack lock after the full cooldown
+	GetWorldTimerManager().SetTimer(
+		AttackCooldownTimer, this, &ABaseCharacter::ResetAttack, AttackCooldownDuration, false);
+}
+
+void ABaseCharacter::ResetAttack()
+{
+	bIsAttacking = false;
+}
+
+void ABaseCharacter::PerformUnarmedHit()
+{
+	const FVector Start   = GetActorLocation();
+	const FVector Forward = GetActorForwardVector();
+	const FVector End     = Start + Forward * UnarmedHitRange;
+
+	TArray<FHitResult> HitResults;
+	FCollisionShape Sphere = FCollisionShape::MakeSphere(UnarmedHitRadius);
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	GetWorld()->SweepMultiByChannel(HitResults, Start, End, FQuat::Identity, ECC_Pawn, Sphere, Params);
+
+	for (const FHitResult& Hit : HitResults)
+	{
+		AActor* HitActor = Hit.GetActor();
+		if (!HitActor) continue;
+		if (!HitActor->GetClass()->ImplementsInterface(UDamageable::StaticClass())) continue;
+
+		IDamageable::Execute_TakeMeleeDamage(HitActor, UnarmedDamage, this);
+		UE_LOG(LogTemp, Log, TEXT("Punch: Hit %s for %.1f damage"), *HitActor->GetName(), UnarmedDamage);
+		break; // Punch hits one target at a time
+	}
+}
 
 void ABaseCharacter::MoveRight(float Value)
 {

@@ -145,6 +145,34 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<AWeaponBase> EquippedWeapon;
 
+	// Montage played when attacking unarmed (punch). Assign in BP_BaseCharacter.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Unarmed")
+	TObjectPtr<UAnimMontage> UnarmedAttackMontage;
+
+	// Damage dealt by an unarmed punch.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Unarmed")
+	float UnarmedDamage = 5.f;
+
+	// Seconds after the punch starts before the hit is checked (matches the wind-up).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Unarmed")
+	float UnarmedHitDelay = 0.2f;
+
+	// Forward reach of the punch sweep (cm).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Unarmed")
+	float UnarmedHitRange = 80.f;
+
+	// Radius of the punch sphere sweep (cm).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Unarmed")
+	float UnarmedHitRadius = 40.f;
+
+	// How long after pressing attack before another attack can begin.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float AttackCooldownDuration = 0.7f;
+
+	// True while an attack is in progress — prevents queuing new attacks.
+	UPROPERTY(BlueprintReadOnly, Category = "Combat")
+	bool bIsAttacking = false;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save")
 	FString SaveSlotName = TEXT("SaveSlot0");
 
@@ -191,6 +219,7 @@ private:
 	UPROPERTY() UInputAction* IA_HotbarScrollDown;
 	UPROPERTY() UInputAction* IA_SaveGameAction;
 	UPROPERTY() UInputAction* IA_LoadGameAction;
+	UPROPERTY() UInputAction* IA_Attack;
 	UPROPERTY() UInputMappingContext* GameplayIMC;
 
 	/** Creates all programmatic input actions and mapping context at runtime. */
@@ -207,6 +236,9 @@ private:
 	void HotbarScrollDown();
 	void OnSaveGamePressed();
 	void OnLoadGamePressed();
+	void OnAttackPressed();
+	void ResetAttack();
+	void PerformUnarmedHit();
 
 	// Widget instances
 	UPROPERTY()
@@ -217,4 +249,7 @@ private:
 
 	/** Scans all UItemDefinition assets via AssetRegistry and builds ItemDefMap. */
 	void ScanItemDefinitions();
+
+	FTimerHandle AttackCooldownTimer;
+	FTimerHandle UnarmedHitTimer;
 };
