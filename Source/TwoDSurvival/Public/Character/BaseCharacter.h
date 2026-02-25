@@ -14,7 +14,10 @@ class UHealthComponent;
 class UHotbarComponent;
 class UItemDefinition;
 class UInputAction;
+class UInputMappingContext;
 class AWeaponBase;
+class UHealthHUDWidget;
+class UHotbarWidget;
 
 enum class EBodyPart : uint8;
 
@@ -56,32 +59,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* IA_ToggleHealthUI;
 
-	// Hotbar slot selection input actions (1-6). Assign in BP_BaseCharacter.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* IA_HotbarSlot1;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* IA_HotbarSlot2;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* IA_HotbarSlot3;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* IA_HotbarSlot4;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* IA_HotbarSlot5;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* IA_HotbarSlot6;
-
-	// Hotbar scroll input actions. Assign in BP_BaseCharacter.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* IA_HotbarScrollUp;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* IA_HotbarScrollDown;
-
 protected:
 	virtual void BeginPlay() override;
 
@@ -105,11 +82,11 @@ public:
 
 	/**
 	 * Called when the player presses the Toggle Health UI key (H).
-	 * Override in BP_BaseCharacter to show/hide the health HUD widget.
+	 * Creates/destroys the Health HUD widget.
 	 */
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "HUD")
 	void ToggleHealthUI();
-	virtual void ToggleHealthUI_Implementation() {}
+	virtual void ToggleHealthUI_Implementation();
 
 	/**
 	 * Called when a container interaction completes (e.g. hold E on a chest).
@@ -168,10 +145,6 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<AWeaponBase> EquippedWeapon;
 
-	// All item definitions in the game. Assign in BP_BaseCharacter for save/load lookup.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save")
-	TArray<UItemDefinition*> AllItemDefinitions;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save")
 	FString SaveSlotName = TEXT("SaveSlot0");
 
@@ -188,8 +161,15 @@ public:
 	void LoadGame();
 	virtual void LoadGame_Implementation();
 
+	// Widget classes — assign in BP_BaseCharacter Details panel.
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UHealthHUDWidget> HealthHUDWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UHotbarWidget> HotbarWidgetClass;
+
 private:
-	// Maps ItemID → ItemDefinition for fast lookup during load. Built in BeginPlay.
+	// Maps ItemID → ItemDefinition for fast lookup during load. Built in BeginPlay via AssetRegistry scan.
 	UPROPERTY()
 	TMap<FName, UItemDefinition*> ItemDefMap;
 
@@ -200,6 +180,22 @@ private:
 	UFUNCTION()
 	void OnBodyPartDamaged(EBodyPart Part, float CurrentHealth, float MaxHealth, bool bJustBroken);
 
+	// Programmatic input actions — created at runtime in CreateInputActions(), no editor assignment needed.
+	UPROPERTY() UInputAction* IA_HotbarSlot1;
+	UPROPERTY() UInputAction* IA_HotbarSlot2;
+	UPROPERTY() UInputAction* IA_HotbarSlot3;
+	UPROPERTY() UInputAction* IA_HotbarSlot4;
+	UPROPERTY() UInputAction* IA_HotbarSlot5;
+	UPROPERTY() UInputAction* IA_HotbarSlot6;
+	UPROPERTY() UInputAction* IA_HotbarScrollUp;
+	UPROPERTY() UInputAction* IA_HotbarScrollDown;
+	UPROPERTY() UInputAction* IA_SaveGameAction;
+	UPROPERTY() UInputAction* IA_LoadGameAction;
+	UPROPERTY() UInputMappingContext* GameplayIMC;
+
+	/** Creates all programmatic input actions and mapping context at runtime. */
+	void CreateInputActions();
+
 	// Hotbar input helpers
 	void SelectHotbarSlot1();
 	void SelectHotbarSlot2();
@@ -209,4 +205,16 @@ private:
 	void SelectHotbarSlot6();
 	void HotbarScrollUp();
 	void HotbarScrollDown();
+	void OnSaveGamePressed();
+	void OnLoadGamePressed();
+
+	// Widget instances
+	UPROPERTY()
+	UHealthHUDWidget* HealthHUDInstance;
+
+	UPROPERTY()
+	UHotbarWidget* HotbarWidgetInstance;
+
+	/** Scans all UItemDefinition assets via AssetRegistry and builds ItemDefMap. */
+	void ScanItemDefinitions();
 };

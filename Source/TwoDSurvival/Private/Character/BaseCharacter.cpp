@@ -10,12 +10,17 @@
 #include "Character/HealthComponent.h"
 #include "Character/HealthTypes.h"
 #include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
+#include "InputMappingContext.h"
 #include "Inventory/ItemDefinition.h"
 #include "Inventory/HotbarComponent.h"
 #include "Weapon/WeaponBase.h"
 #include "Save/TwoDSurvivalSaveGame.h"
 #include "Kismet/GameplayStatics.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "UI/HealthHUDWidget.h"
+#include "UI/HotbarWidget.h"
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -65,6 +70,62 @@ ABaseCharacter::ABaseCharacter()
 	GetCharacterMovement()->bSnapToPlaneAtStart = true;
 }
 
+void ABaseCharacter::CreateInputActions()
+{
+	// Helper lambda to create a boolean input action
+	auto MakeAction = [this](const TCHAR* Name) -> UInputAction*
+	{
+		UInputAction* Action = NewObject<UInputAction>(this, Name);
+		Action->ValueType = EInputActionValueType::Boolean;
+		return Action;
+	};
+
+	IA_HotbarSlot1 = MakeAction(TEXT("IA_HotbarSlot1"));
+	IA_HotbarSlot2 = MakeAction(TEXT("IA_HotbarSlot2"));
+	IA_HotbarSlot3 = MakeAction(TEXT("IA_HotbarSlot3"));
+	IA_HotbarSlot4 = MakeAction(TEXT("IA_HotbarSlot4"));
+	IA_HotbarSlot5 = MakeAction(TEXT("IA_HotbarSlot5"));
+	IA_HotbarSlot6 = MakeAction(TEXT("IA_HotbarSlot6"));
+	IA_HotbarScrollUp = MakeAction(TEXT("IA_HotbarScrollUp"));
+	IA_HotbarScrollDown = MakeAction(TEXT("IA_HotbarScrollDown"));
+	IA_SaveGameAction = MakeAction(TEXT("IA_SaveGame"));
+	IA_LoadGameAction = MakeAction(TEXT("IA_LoadGame"));
+
+	// Create mapping context and bind keys
+	GameplayIMC = NewObject<UInputMappingContext>(this, TEXT("GameplayIMC"));
+
+	GameplayIMC->MapKey(IA_HotbarSlot1, EKeys::One);
+	GameplayIMC->MapKey(IA_HotbarSlot2, EKeys::Two);
+	GameplayIMC->MapKey(IA_HotbarSlot3, EKeys::Three);
+	GameplayIMC->MapKey(IA_HotbarSlot4, EKeys::Four);
+	GameplayIMC->MapKey(IA_HotbarSlot5, EKeys::Five);
+	GameplayIMC->MapKey(IA_HotbarSlot6, EKeys::Six);
+	GameplayIMC->MapKey(IA_HotbarScrollUp, EKeys::MouseScrollUp);
+	GameplayIMC->MapKey(IA_HotbarScrollDown, EKeys::MouseScrollDown);
+	GameplayIMC->MapKey(IA_SaveGameAction, EKeys::F5);
+	GameplayIMC->MapKey(IA_LoadGameAction, EKeys::F9);
+}
+
+void ABaseCharacter::ScanItemDefinitions()
+{
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+	TArray<FAssetData> AssetDataList;
+	AssetRegistry.GetAssetsByClass(UItemDefinition::StaticClass()->GetClassPathName(), AssetDataList);
+
+	for (const FAssetData& AssetData : AssetDataList)
+	{
+		UItemDefinition* Def = Cast<UItemDefinition>(AssetData.GetAsset());
+		if (Def && !Def->ItemID.IsNone())
+		{
+			ItemDefMap.Add(Def->ItemID, Def);
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Auto-scanned %d item definitions."), ItemDefMap.Num());
+}
+
 void ABaseCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -75,14 +136,21 @@ void ABaseCharacter::BeginPlay()
 	// React to body part damage — adjust movement speed and trigger death.
 	HealthComponent->OnBodyPartDamaged.AddDynamic(this, &ABaseCharacter::OnBodyPartDamaged);
 
-	// Build item lookup map for save/load.
-	for (UItemDefinition* Def : AllItemDefinitions)
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		if (Def && !Def->ItemID.IsNone())
+		// Create the always-visible hotbar widget
+		if (HotbarWidgetClass)
 		{
-			ItemDefMap.Add(Def->ItemID, Def);
+			HotbarWidgetInstance = CreateWidget<UHotbarWidget>(PC, HotbarWidgetClass);
+			if (HotbarWidgetInstance)
+			{
+				HotbarWidgetInstance->AddToViewport(0);
+			}
 		}
 	}
+
+	// Auto-scan all item definitions via AssetRegistry
+	ScanItemDefinitions();
 }
 
 void ABaseCharacter::Tick(float DeltaTime)
@@ -93,6 +161,19 @@ void ABaseCharacter::Tick(float DeltaTime)
 void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	// Create programmatic input actions here — guaranteed before bindings regardless of BeginPlay ordering
+	CreateInputActions();
+
+	// Add the programmatic IMC to the subsystem
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(GameplayIMC, 1);
+		}
+	}
 
 	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
@@ -112,17 +193,54 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 			EIC->BindAction(IA_ToggleHealthUI, ETriggerEvent::Started, this, &ABaseCharacter::ToggleHealthUI);
 		}
 
-		// Hotbar slot selection (keys 1-6)
-		if (IA_HotbarSlot1) EIC->BindAction(IA_HotbarSlot1, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot1);
-		if (IA_HotbarSlot2) EIC->BindAction(IA_HotbarSlot2, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot2);
-		if (IA_HotbarSlot3) EIC->BindAction(IA_HotbarSlot3, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot3);
-		if (IA_HotbarSlot4) EIC->BindAction(IA_HotbarSlot4, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot4);
-		if (IA_HotbarSlot5) EIC->BindAction(IA_HotbarSlot5, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot5);
-		if (IA_HotbarSlot6) EIC->BindAction(IA_HotbarSlot6, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot6);
+		// Hotbar slot selection (keys 1-6) — programmatic actions, always valid
+		EIC->BindAction(IA_HotbarSlot1, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot1);
+		EIC->BindAction(IA_HotbarSlot2, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot2);
+		EIC->BindAction(IA_HotbarSlot3, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot3);
+		EIC->BindAction(IA_HotbarSlot4, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot4);
+		EIC->BindAction(IA_HotbarSlot5, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot5);
+		EIC->BindAction(IA_HotbarSlot6, ETriggerEvent::Started, this, &ABaseCharacter::SelectHotbarSlot6);
 
 		// Hotbar scroll (mouse wheel)
-		if (IA_HotbarScrollUp) EIC->BindAction(IA_HotbarScrollUp, ETriggerEvent::Started, this, &ABaseCharacter::HotbarScrollUp);
-		if (IA_HotbarScrollDown) EIC->BindAction(IA_HotbarScrollDown, ETriggerEvent::Started, this, &ABaseCharacter::HotbarScrollDown);
+		EIC->BindAction(IA_HotbarScrollUp, ETriggerEvent::Started, this, &ABaseCharacter::HotbarScrollUp);
+		EIC->BindAction(IA_HotbarScrollDown, ETriggerEvent::Started, this, &ABaseCharacter::HotbarScrollDown);
+
+		// Save/Load (F5/F9)
+		EIC->BindAction(IA_SaveGameAction, ETriggerEvent::Started, this, &ABaseCharacter::OnSaveGamePressed);
+		EIC->BindAction(IA_LoadGameAction, ETriggerEvent::Started, this, &ABaseCharacter::OnLoadGamePressed);
+	}
+}
+
+void ABaseCharacter::ToggleHealthUI_Implementation()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+
+	if (HealthHUDInstance)
+	{
+		HealthHUDInstance->RemoveFromParent();
+		HealthHUDInstance = nullptr;
+		PC->bShowMouseCursor = false;
+		PC->SetInputMode(FInputModeGameOnly());
+	}
+	else if (HealthHUDWidgetClass)
+	{
+		HealthHUDInstance = CreateWidget<UHealthHUDWidget>(PC, HealthHUDWidgetClass);
+		if (HealthHUDInstance)
+		{
+			HealthHUDInstance->AddToViewport(10);
+			// Set initial position — fixes the "fill screen" issue on first spawn
+			const FVector2D InitialPos(50.f, 50.f);
+			HealthHUDInstance->SetPositionInViewport(InitialPos, false);
+			// Tell the widget where it is so the drag system starts from the correct position
+			HealthHUDInstance->InitDragPosition(InitialPos);
+			PC->bShowMouseCursor = true;
+			// GameAndUI lets the first click register as drag immediately — no "click to focus" needed
+			FInputModeGameAndUI InputMode;
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			InputMode.SetHideCursorDuringCapture(false);
+			PC->SetInputMode(InputMode);
+		}
 	}
 }
 
@@ -363,6 +481,8 @@ void ABaseCharacter::SelectHotbarSlot5() { HotbarComponent->SelectSlot(4); }
 void ABaseCharacter::SelectHotbarSlot6() { HotbarComponent->SelectSlot(5); }
 void ABaseCharacter::HotbarScrollUp() { HotbarComponent->CycleSlot(-1); }
 void ABaseCharacter::HotbarScrollDown() { HotbarComponent->CycleSlot(1); }
+void ABaseCharacter::OnSaveGamePressed() { SaveGame(); }
+void ABaseCharacter::OnLoadGamePressed() { LoadGame(); }
 
 void ABaseCharacter::MoveRight(float Value)
 {

@@ -16,10 +16,77 @@ Whenever a task is completed, update `PROGRESS.md` at the project root by append
 
 Do NOT update PROGRESS.md automatically. Instead, ask the user for confirmation that the task is fully complete before adding it. A task may require multiple steps or iterations before it's done.
 
+## C++ First Philosophy
+
+**All logic goes in C++. Blueprint is only for:**
+1. Visual layout of UMG widgets (drag widgets onto canvas, set widget names to match BindWidget)
+2. Assigning asset references in the Details panel (textures, sounds, widget classes, input actions)
+3. Creating socket names in the Skeleton editor
+
+**Never implement logic in Blueprint.** If something seems to require Blueprint logic, find the C++ way:
+- Delegate bindings → `AddDynamic` in C++
+- Widget construction → `NativeConstruct` override
+- Input handling → `SetupPlayerInputComponent` or `CreateInputActions` in C++
+- UI refresh → centralized `RefreshAll()` called from C++ delegate
+- Programmatic input → `NewObject<UInputAction>()` + `NewObject<UInputMappingContext>()` in `BeginPlay`
+- Asset scanning → `FAssetRegistryModule` (no manual `AllItemDefinitions` array to fill)
+- Widget creation → `CreateWidget<T>()` + `AddToViewport()` in C++ BeginPlay or toggle functions
+
+**Accepted Blueprint steps per feature: 0–3 max** (widget layout + class assignment only).
+
 ## C++ / Blueprint Conventions
 
 - **BlueprintImplementableEvent** — can be overridden in Blueprint and called from C++, but is NOT reliably callable from OTHER Blueprints (e.g. a cabinet actor calling a function on the character).
 - **BlueprintNativeEvent + BlueprintCallable** — use this whenever a function needs to be BOTH callable from Blueprint (including external Blueprints) AND overridable in Blueprint. Always declare the `virtual void FunctionName_Implementation()` in the header with an empty body.
+- **BindWidget** — use for required widget references; **BindWidgetOptional** for optional ones. The Blueprint child just needs a widget with the matching name.
+- **NativeConstruct** — the C++ equivalent of Event Construct. Bind delegates, cache component refs, and call initial refresh here.
+- **WidgetTree->ConstructWidget<T>()** — use to create child widgets dynamically in C++ instead of Blueprint.
+
+## Input System Pattern
+
+All input is created programmatically in C++ — no Input Action assets need to be created in the editor for gameplay keys:
+
+```cpp
+// In CreateInputActions() called from BeginPlay:
+UInputAction* IA_Jump = NewObject<UInputAction>(this, TEXT("IA_Jump"));
+IA_Jump->ValueType = EInputActionValueType::Boolean;
+GameplayIMC = NewObject<UInputMappingContext>(this, TEXT("GameplayIMC"));
+GameplayIMC->MapKey(IA_Jump, EKeys::SpaceBar);
+
+// In SetupPlayerInputComponent:
+EIC->BindAction(IA_Jump, ETriggerEvent::Started, this, &ABaseCharacter::OnJump);
+```
+
+Exception: `IA_Interact`, `IA_ToggleInventory`, `IA_ToggleHealthUI` remain as editor-assigned UPROPERTYs because they already exist as assets. New features should use programmatic creation.
+
+## Asset Scanning Pattern
+
+Never use a manual `AllItemDefinitions` array. Use AssetRegistry to auto-scan:
+
+```cpp
+FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+TArray<FAssetData> Assets;
+ARM.Get().GetAssetsByClass(UItemDefinition::StaticClass()->GetClassPathName(), Assets);
+for (const FAssetData& AD : Assets)
+{
+    UItemDefinition* Def = Cast<UItemDefinition>(AD.GetAsset());
+    if (Def && !Def->ItemID.IsNone()) ItemDefMap.Add(Def->ItemID, Def);
+}
+```
+
+Requires `"AssetRegistry"` in `PublicDependencyModuleNames` in `Build.cs`.
+
+## UI Widget Pattern
+
+All widgets are C++ `UUserWidget` subclasses with Blueprint children for layout only:
+
+- `NativeConstruct` → get player pawn, find components, bind delegates, call initial refresh
+- `RefreshAll()` / `RefreshSlots()` → single centralized refresh function, bound to component delegates
+- Dynamic slot UIs → build with `WidgetTree->ConstructWidget<UBorder>()` etc. in `NativeConstruct`
+- Widget creation from character → `CreateWidget<T>(PC, WidgetClass)` + `AddToViewport()` in C++ BeginPlay or toggle functions
+- Toggle pattern → check if instance exists: destroy if yes, create if no
+
+**Blueprint child only needs:** widget names matching `BindWidget` properties. Zero Blueprint logic.
 
 ## Weapon Equip Pattern
 
@@ -37,12 +104,15 @@ Do NOT update PROGRESS.md automatically. Instead, ask the user for confirmation 
 - Mouse position: `Get Owning Player → Get Mouse Position On Viewport` + `Set Position in Viewport (bRemoveDPIScale: false)`
 - Button visibility is category-driven — read `ItemCategory` and `bCanBeEquipped` from the slot's `ItemDef` in Event Construct
 
-## UI Refresh Pattern (UMG Widgets)
+## UI Refresh Pattern
 
-When building inventory/UI systems with dynamic data:
 - **Centralize refresh logic** — create ONE `RefreshAll()` function that updates all UI elements
-- **Use delegate bindings** — bind `OnInventoryChanged` (or similar C++ delegates) directly to `RefreshAll`
-- **Avoid scattered manual refresh calls** — let the delegate bindings handle updates automatically
-- This prevents bugs where UI shows stale data and makes the system easier to reason about
+- **Use delegate bindings** — bind `OnInventoryChanged` / `OnHotbarChanged` / `OnBodyPartDamaged` directly to refresh functions via `AddDynamic` in `NativeConstruct`
+- **Avoid scattered manual refresh calls** — let delegate bindings handle updates automatically
+- This prevents stale UI bugs and makes the system easy to reason about
 
-Example: `WBP_InventoryWidget` has a single `RefreshAll()` that updates both player grid and container grid (if active). Both `InventoryComp->OnInventoryChanged` and `ContainerComp->OnInventoryChanged` are bound to call `RefreshAll()`. No manual refresh calls needed elsewhere.
+## Movement / Physics Notes
+
+- **DO NOT use `DisableMovement()`** to lock player input — it disables gravity, character hangs mid-air
+- Use `bMovementLocked` bool on `ABaseCharacter` instead; `MoveRight` checks it and returns early
+- Movement constrained to X/Z plane via `bConstrainToPlane` + `SetPlaneConstraintNormal(FVector(0,1,0))`
