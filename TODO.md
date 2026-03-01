@@ -52,12 +52,15 @@ Items are loosely ordered by priority / dependency.
 
 ## Enemy
 
-- [ ] **Base enemy** — `AEnemyBase` (C++) with `UHealthComponent`, movement (patrol / chase states), and `IDamageable` implementation. Blueprint child `BP_Enemy_Base` for asset assignment.
-- [ ] **AI states** — Patrol (walk between waypoints), Detect (line-of-sight or proximity trigger), Chase (move toward player), Attack (enter range → trigger attack), Flee (optional, low health).
-- [ ] **Enemy attack** — melee swing with hitbox overlap that calls `HealthComponent->ApplyDamage` on the player's body part(s).
-- [ ] **Enemy health bar** — world-space widget above enemy showing a simple health bar; hide when at full health, show briefly on damage.
-- [ ] **Drop loot** — on death, spawn item actors from a configurable loot table (array of `UItemDefinition` + weight).
-- [ ] **Enemy spawner** — Blueprint Actor with spawn radius, max count, respawn delay; spawns `BP_Enemy` variants in the world.
+- [x] **Base enemy** — `AEnemyBase` (C++) with `UHealthComponent`, C++ state machine (Idle/Patrol/Chase/Attack/Dead), `IDamageable` implementation. `BP_EnemyBase` Blueprint child for mesh/AnimBP/loot assignment.
+- [x] **AI states** — Idle (wait then patrol), Patrol (wander within PatrolRange of spawn), Chase (move toward player on X axis), Attack (swing + cooldown), Dead (loot drop + delayed destroy). Aggro via sphere distance; lose-aggro hysteresis via LoseAggroMultiplier.
+- [x] **Enemy attack** — `UBoxComponent` MeleeHitbox enabled per swing (BeginMeleeAttack/EndMeleeAttack pattern mirrors AWeaponBase). `HitActorsThisSwing` set prevents multi-hit. Calls `Execute_TakeMeleeDamage` on IDamageable targets.
+- [x] **Post-attack stand-still** — `PostAttackStandStillDuration` (EditDefaultsOnly) locks movement and re-attack for an extra window after `AttackCooldown`. Prevents sliding when transitioning back to walk.
+- [x] **Rotation lock during attack** — enemy facing is frozen while `bIsAttacking` is true; player can jump over mid-swing without the enemy tracking them.
+- [x] **Enemy health bar** — `UEnemyHealthBarWidget` (C++ UUserWidget, BindWidget ProgressBar). Attached via `UWidgetComponent` in Screen space above enemy's head. Hidden until first damage hit. Color-coded green/yellow/red.
+- [x] **Drop loot** — `FLootEntry` struct (ItemDef, DropChance, MinCount, MaxCount). `LootTable` TArray on AEnemyBase (EditDefaultsOnly). On death: roll per entry, spawn `AWorldItem` actors with random offset.
+- [x] **World item pickup** — `AWorldItem` (AActor + IInteractable). Instant interaction type. Press E → `TryAddItem` on player InventoryComponent → self-destruct on success.
+- [ ] **Enemy spawner** — Blueprint Actor with spawn radius, max count, respawn delay; spawns `BP_EnemyBase` variants in the world.
 
 ## Crafting
 
