@@ -34,6 +34,10 @@ void AWeaponBase::BeginPlay()
 
 void AWeaponBase::BeginAttack(float DamageMultiplier)
 {
+	// Guard: already active — e.g. OnAttackPressed called this, then AnimNotify_BeginAttack fired too.
+	// Let the first call's timer handle EndAttack; the second call is a no-op.
+	if (HitboxComponent->GetCollisionEnabled() != ECollisionEnabled::NoCollision) return;
+
 	StoredDamageMultiplier = DamageMultiplier;
 	HitActorsThisSwing.Reset();
 
@@ -45,6 +49,8 @@ void AWeaponBase::BeginAttack(float DamageMultiplier)
 
 void AWeaponBase::EndAttack()
 {
+	// Clear the timer in case EndAttack was called early (e.g. by AnimNotify_EndAttack)
+	GetWorldTimerManager().ClearTimer(SwingTimerHandle);
 	HitboxComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HitboxComponent->SetGenerateOverlapEvents(false);
 	HitActorsThisSwing.Reset();

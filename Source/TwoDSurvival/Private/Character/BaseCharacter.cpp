@@ -21,7 +21,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UI/HealthHUDWidget.h"
 #include "UI/HotbarWidget.h"
-#include "Combat/DamageableInterface.h"
+// DamageableInterface included via BaseCharacter.h
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -139,6 +139,9 @@ void ABaseCharacter::BeginPlay()
 	// React to body part damage — adjust movement speed and trigger death.
 	HealthComponent->OnBodyPartDamaged.AddDynamic(this, &ABaseCharacter::OnBodyPartDamaged);
 
+	// Handle player death — disable input, play montage, fire BP event.
+	HealthComponent->OnDeath.AddDynamic(this, &ABaseCharacter::HandlePlayerDeath);
+
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		// Create the always-visible hotbar widget
@@ -159,6 +162,24 @@ void ABaseCharacter::BeginPlay()
 void ABaseCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+}
+
+void ABaseCharacter::Jump()
+{
+	if (bIsAttacking) return;
+	Super::Jump();
+}
+
+void ABaseCharacter::Crouch(bool bClientSimulation)
+{
+	if (bIsAttacking) return;
+	Super::Crouch(bClientSimulation);
+}
+
+void ABaseCharacter::UnCrouch(bool bClientSimulation)
+{
+	if (bIsAttacking) return;
+	Super::UnCrouch(bClientSimulation);
 }
 
 void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -182,8 +203,8 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	{
 		if (IA_Interact)
 		{
-			EIC->BindAction(IA_Interact, ETriggerEvent::Started,   InteractionComponent, &UInteractionComponent::StartInteract);
-			EIC->BindAction(IA_Interact, ETriggerEvent::Completed, InteractionComponent, &UInteractionComponent::StopInteract);
+			EIC->BindAction(IA_Interact, ETriggerEvent::Started,   this, &ABaseCharacter::OnInteractStarted);
+			EIC->BindAction(IA_Interact, ETriggerEvent::Completed, this, &ABaseCharacter::OnInteractCompleted);
 		}
 
 		if (IA_ToggleInventory)
@@ -490,41 +511,129 @@ void ABaseCharacter::HotbarScrollDown() { HotbarComponent->CycleSlot(1); }
 void ABaseCharacter::OnSaveGamePressed() { SaveGame(); }
 void ABaseCharacter::OnLoadGamePressed() { LoadGame(); }
 
+void ABaseCharacter::TakeMeleeDamage_Implementation(float Amount, AActor* DamageSource)
+{
+	if (!HealthComponent || HealthComponent->IsDead()) return;
+
+	// Apply damage to the Body by default. Enemies that want per-part hits
+	// can call HealthComponent->ApplyDamage directly with a specific EBodyPart.
+	HealthComponent->ApplyDamage(EBodyPart::Body, Amount);
+
+	UE_LOG(LogTemp, Log, TEXT("BaseCharacter took %.1f melee damage from %s"),
+		Amount, DamageSource ? *DamageSource->GetName() : TEXT("Unknown"));
+}
+
+void ABaseCharacter::HandlePlayerDeath()
+{
+	// Prevent repeated calls (OnDeath could fire more than once in edge cases)
+	if (!HealthComponent || !HealthComponent->IsDead()) return;
+
+	// Lock all movement input
+	bMovementLocked = true;
+
+	// Play the death animation if assigned
+	if (DeathMontage)
+	{
+		PlayAnimMontage(DeathMontage);
+	}
+
+	// Disable player input entirely (movement, hotbar, attack, etc.)
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		DisableInput(PC);
+	}
+
+	// Notify Blueprint — override OnPlayerDied in BP_BaseCharacter to show a respawn screen.
+	OnPlayerDied();
+
+	UE_LOG(LogTemp, Log, TEXT("BaseCharacter: Player died."));
+}
+
 void ABaseCharacter::OnAttackPressed()
 {
 	if (bIsAttacking) return;
 
+	// Don't interrupt an in-progress traversal action (vault, climb, etc.)
+	if (bIsTraversing) return;
+
+	// Don't attack while any UI cursor is visible (inventory, health HUD, etc.)
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (PC->bShowMouseCursor) return;
+	}
+
 	bIsAttacking = true;
+
+	UAnimMontage* MontageToPlay = nullptr;
 
 	if (EquippedWeapon)
 	{
-		// Armed attack — play the weapon's own montage and enable its hitbox
-		if (EquippedWeapon->AttackMontage)
-		{
-			PlayAnimMontage(EquippedWeapon->AttackMontage);
-		}
-		const float DamageMultiplier = HealthComponent->GetDamageMultiplier();
-		EquippedWeapon->BeginAttack(DamageMultiplier);
+		// Armed attack — play the montage only.
+		// AnimNotify_BeginAttack in the montage calls EquippedWeapon->BeginAttack() at the
+		// precise swing frame; AnimNotify_EndAttack closes the hitbox at the recovery frame.
+		MontageToPlay = EquippedWeapon->AttackMontage;
 	}
 	else
 	{
-		// Unarmed — play punch montage, then do a delayed sphere sweep for hit detection
-		if (UnarmedAttackMontage)
-		{
-			PlayAnimMontage(UnarmedAttackMontage);
-		}
+		// Unarmed — play punch montage, then do a delayed sphere sweep for hit detection.
+		MontageToPlay = UnarmedAttackMontage;
 		GetWorldTimerManager().SetTimer(
 			UnarmedHitTimer, this, &ABaseCharacter::PerformUnarmedHit, UnarmedHitDelay, false);
 	}
 
-	// Reset the attack lock after the full cooldown
+	if (MontageToPlay)
+	{
+		const float MontageLength = PlayAnimMontage(MontageToPlay);
+
+		if (MontageLength > 0.f)
+		{
+			// Montage started successfully — reset bIsAttacking (and IK) exactly when it ends.
+			// Do NOT start the fallback timer; it would fire mid-animation for long montages
+			// (e.g. hammer swing > 0.7s) and re-enable IK before the animation finishes.
+			if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
+			{
+				AnimInst->OnMontageEnded.RemoveDynamic(this, &ABaseCharacter::OnAttackMontageEnded);
+				AnimInst->OnMontageEnded.AddDynamic(this, &ABaseCharacter::OnAttackMontageEnded);
+			}
+			return;
+		}
+	}
+
+	// Fallback: montage not assigned or failed to play — reset via timer so the player
+	// is never permanently locked out of attacking.
 	GetWorldTimerManager().SetTimer(
 		AttackCooldownTimer, this, &ABaseCharacter::ResetAttack, AttackCooldownDuration, false);
 }
 
 void ABaseCharacter::ResetAttack()
 {
+	// Called by the safety-fallback timer (no montage assigned, or montage ended normally first).
 	bIsAttacking = false;
+
+	// Clean up the montage-end delegate in case the montage already ended and fired it
+	if (UAnimInstance* AnimInst = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+	{
+		AnimInst->OnMontageEnded.RemoveDynamic(this, &ABaseCharacter::OnAttackMontageEnded);
+	}
+}
+
+void ABaseCharacter::OnAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	// Only react to our own attack montages
+	const bool bWasWeaponMontage  = EquippedWeapon && Montage == EquippedWeapon->AttackMontage;
+	const bool bWasUnarmedMontage = Montage == UnarmedAttackMontage;
+	if (!bWasWeaponMontage && !bWasUnarmedMontage) return;
+
+	bIsAttacking = false;
+
+	// Cancel the safety-fallback timer — montage ended naturally, no need for it
+	GetWorldTimerManager().ClearTimer(AttackCooldownTimer);
+
+	// Remove self from the delegate — each attack re-adds it
+	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
+	{
+		AnimInst->OnMontageEnded.RemoveDynamic(this, &ABaseCharacter::OnAttackMontageEnded);
+	}
 }
 
 void ABaseCharacter::PerformUnarmedHit()
@@ -552,9 +661,22 @@ void ABaseCharacter::PerformUnarmedHit()
 	}
 }
 
+void ABaseCharacter::OnInteractStarted()
+{
+	if (bIsAttacking) return;
+	InteractionComponent->StartInteract();
+}
+
+void ABaseCharacter::OnInteractCompleted()
+{
+	// Always forward release so a hold-interaction that was started before an attack
+	// doesn't get stuck with its timer running.
+	InteractionComponent->StopInteract();
+}
+
 void ABaseCharacter::MoveRight(float Value)
 {
-	if (bMovementLocked) return;
+	if (bMovementLocked || bIsAttacking) return;
 
 	if (FMath::Abs(Value) > KINDA_SMALL_NUMBER)
 	{

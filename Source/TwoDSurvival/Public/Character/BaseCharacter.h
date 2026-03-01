@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Combat/DamageableInterface.h"
 #include "BaseCharacter.generated.h"
 
 class USpringArmComponent;
@@ -22,7 +23,7 @@ class UHotbarWidget;
 enum class EBodyPart : uint8;
 
 UCLASS()
-class TWODSURVIVAL_API ABaseCharacter : public ACharacter
+class TWODSURVIVAL_API ABaseCharacter : public ACharacter, public IDamageable
 {
 	GENERATED_BODY()
 
@@ -65,6 +66,12 @@ protected:
 public:
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+	// Block jumping, crouching, and un-crouching while an attack montage is playing.
+	// All three are ACharacter virtuals — Blueprint bindings call through to these automatically.
+	virtual void Jump() override;
+	virtual void Crouch(bool bClientSimulation = false) override;
+	virtual void UnCrouch(bool bClientSimulation = false) override;
 
 	/** Move the character left/right and rotate to face the movement direction.
 	 *  @param Value  Positive = right, Negative = left, 0 = no movement.
@@ -129,6 +136,25 @@ public:
 	void UnequipWeapon();
 	virtual void UnequipWeapon_Implementation();
 
+	/**
+	 * IDamageable implementation — called by enemy weapon hitboxes or unarmed sweeps.
+	 * Damages the Body part. Override in Blueprint for more granular hit location logic.
+	 */
+	virtual void TakeMeleeDamage_Implementation(float Amount, AActor* DamageSource) override;
+
+	/**
+	 * Fired from C++ when Head or Body health reaches 0.
+	 * Override in BP_BaseCharacter to show a death / respawn screen.
+	 */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Combat")
+	void OnPlayerDied();
+
+	// Set to true by Blueprint when a traversal action (vault, climb, etc.) begins.
+	// Set back to false when traversal completes or is interrupted.
+	// While true, attack input is blocked so traversal cannot be cancelled mid-move.
+	UPROPERTY(BlueprintReadWrite, Category = "Movement")
+	bool bIsTraversing = false;
+
 	// When true, player-driven horizontal movement input is ignored (hold interaction in progress).
 	// Gravity and physics still apply normally.
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
@@ -173,6 +199,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	bool bIsAttacking = false;
 
+	// Montage played when the player dies (Head or Body reaches 0). Assign in BP_BaseCharacter.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<UAnimMontage> DeathMontage;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save")
 	FString SaveSlotName = TEXT("SaveSlot0");
 
@@ -208,6 +238,11 @@ private:
 	UFUNCTION()
 	void OnBodyPartDamaged(EBodyPart Part, float CurrentHealth, float MaxHealth, bool bJustBroken);
 
+	// Bound to HealthComponent->OnDeath.
+	// Disables input, plays DeathMontage, and fires the OnPlayerDied BlueprintImplementableEvent.
+	UFUNCTION()
+	void HandlePlayerDeath();
+
 	// Programmatic input actions — created at runtime in CreateInputActions(), no editor assignment needed.
 	UPROPERTY() UInputAction* IA_HotbarSlot1;
 	UPROPERTY() UInputAction* IA_HotbarSlot2;
@@ -236,9 +271,19 @@ private:
 	void HotbarScrollDown();
 	void OnSaveGamePressed();
 	void OnLoadGamePressed();
+	// Interact wrappers — gate on !bIsAttacking before forwarding to InteractionComponent.
+	void OnInteractStarted();
+	void OnInteractCompleted();
+
 	void OnAttackPressed();
 	void ResetAttack();
 	void PerformUnarmedHit();
+
+	// Bound to UAnimInstance::OnMontageEnded after each attack.
+	// Resets bIsAttacking (re-enables IK) exactly when the montage finishes,
+	// rather than after a fixed AttackCooldownDuration timer.
+	UFUNCTION()
+	void OnAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
 	// Widget instances
 	UPROPERTY()

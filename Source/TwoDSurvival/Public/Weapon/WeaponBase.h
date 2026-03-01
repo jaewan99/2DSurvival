@@ -49,12 +49,20 @@ public:
 	TObjectPtr<UItemDefinition> SourceItemDef;
 
 	/**
-	 * Enables the hitbox for the swing window, then auto-disables it.
-	 * Called by the owning character when an attack starts.
+	 * Enables the hitbox for the swing window, then auto-disables it after SwingWindowDuration.
+	 * Called by the owning character (or AnimNotify_BeginAttack) when an attack starts.
 	 * @param DamageMultiplier  Arm health multiplier from the character's HealthComponent.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	void BeginAttack(float DamageMultiplier);
+
+	/**
+	 * Disables the hitbox and clears the auto-close timer.
+	 * Called automatically by the SwingWindowDuration timer, or by AnimNotify_EndAttack
+	 * for frame-accurate close at a specific position in the attack montage.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Weapon")
+	void EndAttack();
 
 protected:
 	virtual void BeginPlay() override;
@@ -67,8 +75,6 @@ private:
 	TSet<AActor*> HitActorsThisSwing;
 
 	FTimerHandle SwingTimerHandle;
-
-	void EndAttack();
 
 	UFUNCTION()
 	void OnHitboxOverlap(
