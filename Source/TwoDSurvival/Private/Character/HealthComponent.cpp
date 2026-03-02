@@ -40,6 +40,11 @@ void UHealthComponent::ApplyDamage(EBodyPart Part, float Amount)
 	const bool bJustBroken = !bWasBroken && Data->IsBroken();
 
 	OnBodyPartDamaged.Broadcast(Part, Data->CurrentHealth, Data->MaxHealth, bJustBroken);
+
+	if (bJustBroken && (Part == EBodyPart::Head || Part == EBodyPart::Body))
+	{
+		OnDeath.Broadcast();
+	}
 }
 
 void UHealthComponent::RestoreHealth(EBodyPart Part, float Amount)

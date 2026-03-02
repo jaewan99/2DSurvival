@@ -195,6 +195,42 @@ bool UInventoryComponent::ShrinkSlots(int32 Amount)
 	return true;
 }
 
+int32 UInventoryComponent::CountItemByID(FName ItemID) const
+{
+	int32 Total = 0;
+	for (const FInventorySlot& Slot : Slots)
+	{
+		if (!Slot.IsEmpty() && Slot.ItemDef && Slot.ItemDef->ItemID == ItemID)
+			Total += Slot.Quantity;
+	}
+	return Total;
+}
+
+void UInventoryComponent::RemoveItemByID(FName ItemID, int32 Count)
+{
+	if (Count <= 0) return;
+
+	int32 Remaining = Count;
+	for (FInventorySlot& Slot : Slots)
+	{
+		if (Remaining <= 0) break;
+		if (Slot.IsEmpty() || !Slot.ItemDef || Slot.ItemDef->ItemID != ItemID) continue;
+
+		const int32 Remove = FMath::Min(Slot.Quantity, Remaining);
+		Slot.Quantity -= Remove;
+		Remaining    -= Remove;
+
+		if (Slot.Quantity <= 0)
+		{
+			Slot.ItemDef = nullptr;
+			Slot.Quantity = 0;
+		}
+	}
+
+	if (Remaining < Count)
+		OnInventoryChanged.Broadcast();
+}
+
 bool UInventoryComponent::CanRemoveItem(int32 SlotIndex) const
 {
 	if (!Slots.IsValidIndex(SlotIndex)) return false;

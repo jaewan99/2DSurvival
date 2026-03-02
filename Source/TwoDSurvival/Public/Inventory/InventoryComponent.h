@@ -91,6 +91,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool CanRemoveItem(int32 SlotIndex) const;
 
+	/** Returns the total quantity of all slots whose ItemDef matches ItemID. */
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	int32 CountItemByID(FName ItemID) const;
+
+	/** Removes up to Count items matching ItemID, consuming from slots in order. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void RemoveItemByID(FName ItemID, int32 Count);
+
 protected:
 	virtual void BeginPlay() override;
 };

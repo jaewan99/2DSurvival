@@ -21,6 +21,8 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UI/HealthHUDWidget.h"
 #include "UI/HotbarWidget.h"
+#include "UI/CraftingWidget.h"
+#include "Crafting/CraftingComponent.h"
 // DamageableInterface included via BaseCharacter.h
 
 ABaseCharacter::ABaseCharacter()
@@ -62,6 +64,9 @@ ABaseCharacter::ABaseCharacter()
 	// Hotbar component — quick-select item slots
 	HotbarComponent = CreateDefaultSubobject<UHotbarComponent>(TEXT("HotbarComponent"));
 
+	// Crafting component — recipe scanning and craft execution
+	CraftingComponent = CreateDefaultSubobject<UCraftingComponent>(TEXT("CraftingComponent"));
+
 	// Don't auto-rotate toward movement direction — MoveRight handles rotation
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 
@@ -91,7 +96,7 @@ void ABaseCharacter::CreateInputActions()
 	IA_HotbarScrollDown = MakeAction(TEXT("IA_HotbarScrollDown"));
 	IA_SaveGameAction = MakeAction(TEXT("IA_SaveGame"));
 	IA_LoadGameAction = MakeAction(TEXT("IA_LoadGame"));
-	IA_Attack         = MakeAction(TEXT("IA_Attack"));
+	IA_Attack = MakeAction(TEXT("IA_Attack"));
 
 	// Create mapping context and bind keys
 	GameplayIMC = NewObject<UInputMappingContext>(this, TEXT("GameplayIMC"));
@@ -106,7 +111,7 @@ void ABaseCharacter::CreateInputActions()
 	GameplayIMC->MapKey(IA_HotbarScrollDown, EKeys::MouseScrollDown);
 	GameplayIMC->MapKey(IA_SaveGameAction, EKeys::F5);
 	GameplayIMC->MapKey(IA_LoadGameAction, EKeys::F9);
-	GameplayIMC->MapKey(IA_Attack,         EKeys::LeftMouseButton);
+	GameplayIMC->MapKey(IA_Attack, EKeys::LeftMouseButton);
 }
 
 void ABaseCharacter::ScanItemDefinitions()
@@ -238,20 +243,62 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	}
 }
 
+void ABaseCharacter::ShowUICursor()
+{
+	++UIOpenCount;
+	if (UIOpenCount == 1)
+	{
+		if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		{
+			PC->bShowMouseCursor = true;
+			FInputModeGameAndUI InputMode;
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			InputMode.SetHideCursorDuringCapture(false);
+			PC->SetInputMode(InputMode);
+		}
+	}
+}
+
+void ABaseCharacter::HideUICursor()
+{
+	UIOpenCount = FMath::Max(0, UIOpenCount - 1);
+	if (UIOpenCount == 0)
+	{
+		if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		{
+			PC->bShowMouseCursor = false;
+			PC->SetInputMode(FInputModeGameOnly());
+		}
+	}
+}
+
+void ABaseCharacter::RegisterTooltip(UUserWidget* Tooltip)
+{
+	ActiveItemTooltip = Tooltip;
+}
+
+void ABaseCharacter::ClearTooltip()
+{
+	if (ActiveItemTooltip)
+	{
+		ActiveItemTooltip->RemoveFromParent();
+		ActiveItemTooltip = nullptr;
+	}
+}
+
 void ABaseCharacter::ToggleHealthUI_Implementation()
 {
-	APlayerController* PC = Cast<APlayerController>(GetController());
-	if (!PC) return;
-
 	if (HealthHUDInstance)
 	{
 		HealthHUDInstance->RemoveFromParent();
 		HealthHUDInstance = nullptr;
-		PC->bShowMouseCursor = false;
-		PC->SetInputMode(FInputModeGameOnly());
+		HideUICursor();
 	}
 	else if (HealthHUDWidgetClass)
 	{
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!PC) return;
+
 		HealthHUDInstance = CreateWidget<UHealthHUDWidget>(PC, HealthHUDWidgetClass);
 		if (HealthHUDInstance)
 		{
@@ -261,14 +308,40 @@ void ABaseCharacter::ToggleHealthUI_Implementation()
 			HealthHUDInstance->SetPositionInViewport(InitialPos, false);
 			// Tell the widget where it is so the drag system starts from the correct position
 			HealthHUDInstance->InitDragPosition(InitialPos);
-			PC->bShowMouseCursor = true;
-			// GameAndUI lets the first click register as drag immediately — no "click to focus" needed
-			FInputModeGameAndUI InputMode;
-			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-			InputMode.SetHideCursorDuringCapture(false);
-			PC->SetInputMode(InputMode);
+			ShowUICursor();
 		}
 	}
+}
+
+void ABaseCharacter::ToggleCrafting_Implementation()
+{
+	if (CraftingWidgetInstance)
+	{
+		CraftingWidgetInstance->RemoveFromParent();
+		CraftingWidgetInstance = nullptr;
+		HideUICursor();
+	}
+	else if (CraftingWidgetClass)
+	{
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!PC) return;
+
+		CraftingWidgetInstance = CreateWidget<UCraftingWidget>(PC, CraftingWidgetClass);
+		if (CraftingWidgetInstance)
+		{
+			CraftingWidgetInstance->AddToViewport(5);
+			ShowUICursor();
+		}
+	}
+}
+
+void ABaseCharacter::CloseCrafting_Implementation()
+{
+	if (!CraftingWidgetInstance) return;
+
+	CraftingWidgetInstance->RemoveFromParent();
+	CraftingWidgetInstance = nullptr;
+	HideUICursor();
 }
 
 void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory)
@@ -333,12 +406,8 @@ void ABaseCharacter::OnBodyPartDamaged(EBodyPart Part, float CurrentHealth, floa
 	{
 		GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * HealthComponent->GetMovementSpeedMultiplier();
 	}
-
-	// Broadcast death if a vital part (Head or Body) just reached 0.
-	if (bJustBroken && (Part == EBodyPart::Head || Part == EBodyPart::Body))
-	{
-		HealthComponent->OnDeath.Broadcast();
-	}
+	// Note: OnDeath is broadcast directly from UHealthComponent::ApplyDamage when Head/Body breaks.
+	// No need to broadcast it here — doing so would cause HandlePlayerDeath to fire twice.
 }
 
 UItemDefinition* ABaseCharacter::FindItemDefByID(FName ItemID) const

@@ -19,6 +19,8 @@ class UInputMappingContext;
 class AWeaponBase;
 class UHealthHUDWidget;
 class UHotbarWidget;
+class UCraftingComponent;
+class UCraftingWidget;
 
 enum class EBodyPart : uint8;
 
@@ -47,6 +49,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hotbar")
 	UHotbarComponent* HotbarComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crafting")
+	UCraftingComponent* CraftingComponent;
 
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -80,6 +85,37 @@ public:
 	void MoveRight(float Value);
 
 	/**
+	 * Increments the UI-open counter and shows the mouse cursor when the first UI panel opens.
+	 * Call this whenever any overlay UI (inventory, crafting, health HUD, etc.) becomes visible.
+	 * Pair every ShowUICursor() call with a matching HideUICursor() call on close.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void ShowUICursor();
+
+	/**
+	 * Decrements the UI-open counter. Hides the mouse cursor only when ALL UI panels have closed.
+	 * Safe to call extra times — counter will not go below zero.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void HideUICursor();
+
+	/**
+	 * Stores the currently visible item tooltip so it can be force-removed when UI panels close.
+	 * Call this from WBP_InventorySlot's OnMouseEnter after creating the tooltip widget.
+	 * Pass null to clear the stored reference without removing anything.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void RegisterTooltip(UUserWidget* Tooltip);
+
+	/**
+	 * Force-removes the stored tooltip from the viewport.
+	 * Safe to call when no tooltip is active or after it was already removed by OnMouseLeave.
+	 * Call this from CloseContainerInventory and ToggleInventory instead of ClearContainerTooltips.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void ClearTooltip();
+
+	/**
 	 * Called when the player presses the Toggle Inventory key (I).
 	 * Override in BP_BaseCharacter to show/hide the inventory widget.
 	 */
@@ -94,6 +130,20 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "HUD")
 	void ToggleHealthUI();
 	virtual void ToggleHealthUI_Implementation();
+
+	/**
+	 * Called when the player presses the Crafting key (C).
+	 * Creates/destroys the Crafting widget.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Crafting")
+	void ToggleCrafting();
+	virtual void ToggleCrafting_Implementation();
+
+	// Closes the crafting UI if open. Called when the player walks out of range.
+	// Safe to call when already closed — does nothing.
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Crafting")
+	void CloseCrafting();
+	virtual void CloseCrafting_Implementation();
 
 	/**
 	 * Called when a container interaction completes (e.g. hold E on a chest).
@@ -226,6 +276,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UHotbarWidget> HotbarWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UCraftingWidget> CraftingWidgetClass;
+
 private:
 	// Maps ItemID → ItemDefinition for fast lookup during load. Built in BeginPlay via AssetRegistry scan.
 	UPROPERTY()
@@ -292,9 +345,22 @@ private:
 	UPROPERTY()
 	UHotbarWidget* HotbarWidgetInstance;
 
+	UPROPERTY()
+	UCraftingWidget* CraftingWidgetInstance;
+
 	/** Scans all UItemDefinition assets via AssetRegistry and builds ItemDefMap. */
 	void ScanItemDefinitions();
 
 	FTimerHandle AttackCooldownTimer;
 	FTimerHandle UnarmedHitTimer;
+
+	// How many UI panels currently want the mouse cursor shown.
+	// ShowUICursor() increments, HideUICursor() decrements.
+	// Cursor is hidden only when this reaches 0.
+	int32 UIOpenCount = 0;
+
+	// The currently visible item tooltip widget, registered by WBP_InventorySlot on hover.
+	// Cleared by ClearTooltip() when any UI panel closes.
+	UPROPERTY()
+	UUserWidget* ActiveItemTooltip = nullptr;
 };

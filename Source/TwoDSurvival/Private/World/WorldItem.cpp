@@ -5,17 +5,17 @@
 #include "Inventory/InventoryComponent.h"
 #include "Inventory/ItemDefinition.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/SphereComponent.h"
+#include "Components/BoxComponent.h"
 
 AWorldItem::AWorldItem()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// Sphere is the root — InteractionComponent on the player detects overlap with this
-	InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
-	RootComponent = InteractionSphere;
-	InteractionSphere->SetSphereRadius(80.f);
-	InteractionSphere->SetCollisionProfileName(TEXT("OverlapAll"));
+	// Box is the root — InteractionComponent on the player detects overlap with this
+	InteractionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBox"));
+	RootComponent = InteractionBox;
+	InteractionBox->SetBoxExtent(FVector(40.f, 40.f, 40.f));
+	InteractionBox->SetCollisionProfileName(TEXT("OverlapAll"));
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetupAttachment(RootComponent);
@@ -30,9 +30,9 @@ void AWorldItem::BeginPlay()
 	// If this actor spawns inside an already-active InteractionComponent detection sphere,
 	// OnComponentBeginOverlap won't fire automatically. Force a recheck so nearby players
 	// pick it up immediately without having to walk away and back.
-	if (InteractionSphere)
+	if (InteractionBox)
 	{
-		InteractionSphere->UpdateOverlaps();
+		InteractionBox->UpdateOverlaps();
 	}
 }
 

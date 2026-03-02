@@ -210,6 +210,7 @@ void AEnemyBase::TickAttack(float DeltaTime)
 void AEnemyBase::SetEnemyState(EEnemyState NewState)
 {
 	if (CurrentState == NewState) return;
+	if (CurrentState == EEnemyState::Dead) return; // Dead is terminal — no transitions out
 	CurrentState = NewState;
 
 	switch (NewState)
@@ -231,6 +232,11 @@ void AEnemyBase::SetEnemyState(EEnemyState NewState)
 		break;
 	case EEnemyState::Dead:
 		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->MaxWalkSpeed = 0.f;
+		GetWorldTimerManager().ClearTimer(SwingTimerHandle);
+		GetWorldTimerManager().ClearTimer(AttackCooldownTimer);
+		GetWorldTimerManager().ClearTimer(PostAttackMoveTimer);
+		GetWorldTimerManager().ClearTimer(RotationLockTimer);
 		break;
 	}
 }
@@ -322,6 +328,9 @@ void AEnemyBase::TakeMeleeDamage_Implementation(float Amount, AActor* DamageSour
 	if (CurrentState == EEnemyState::Dead) return;
 
 	HealthComp->ApplyDamage(EBodyPart::Body, Amount);
+
+	// ApplyDamage may have fired OnDeath synchronously — don't override Dead state
+	if (CurrentState == EEnemyState::Dead) return;
 
 	ShowHealthBar();
 	UpdateHealthBar();

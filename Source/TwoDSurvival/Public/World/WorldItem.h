@@ -9,7 +9,7 @@
 
 class UItemDefinition;
 class UStaticMeshComponent;
-class USphereComponent;
+class UBoxComponent;
 
 /**
  * A physical item dropped in the world (e.g. enemy loot).
@@ -30,9 +30,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item")
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
-	// Sphere used by UInteractionComponent for proximity detection.
+	// Box used by UInteractionComponent for proximity detection.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item")
-	TObjectPtr<USphereComponent> InteractionSphere;
+	TObjectPtr<UBoxComponent> InteractionBox;
 
 	// Set by EnemyBase::SpawnLoot() after the actor is spawned.
 	UPROPERTY(BlueprintReadWrite, Category = "Item")
