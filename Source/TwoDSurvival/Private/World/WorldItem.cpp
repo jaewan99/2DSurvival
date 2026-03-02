@@ -23,6 +23,19 @@ AWorldItem::AWorldItem()
 	Mesh->SetRelativeScale3D(FVector(0.3f));
 }
 
+void AWorldItem::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// If this actor spawns inside an already-active InteractionComponent detection sphere,
+	// OnComponentBeginOverlap won't fire automatically. Force a recheck so nearby players
+	// pick it up immediately without having to walk away and back.
+	if (InteractionSphere)
+	{
+		InteractionSphere->UpdateOverlaps();
+	}
+}
+
 // --- IInteractable ---
 
 EInteractionType AWorldItem::GetInteractionType_Implementation()

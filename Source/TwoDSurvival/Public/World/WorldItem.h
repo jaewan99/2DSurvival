@@ -42,6 +42,10 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "Item")
 	int32 Quantity = 1;
 
+protected:
+	virtual void BeginPlay() override;
+
+public:
 	// IInteractable interface
 	virtual EInteractionType GetInteractionType_Implementation() override;
 	virtual float GetInteractionDuration_Implementation() override;

@@ -102,7 +102,7 @@ bool UInteractionComponent::HasFocusedInteractable() const
 void UInteractionComponent::OnDetectionBeginOverlap(UPrimitiveComponent* /*OverlappedComponent*/, AActor* OtherActor,
 	UPrimitiveComponent* /*OtherComp*/, int32 /*OtherBodyIndex*/, bool /*bFromSweep*/, const FHitResult& /*SweepResult*/)
 {
-	if (OtherActor && OtherActor->Implements<UInteractable>())
+	if (OtherActor && Cast<IInteractable>(OtherActor))
 	{
 		NearbyInteractables.AddUnique(OtherActor);
 		UpdateFocusedInteractable();
