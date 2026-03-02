@@ -149,6 +149,13 @@ void ABaseCharacter::BeginPlay()
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
+		// Always show the mouse cursor — GameAndUI lets game input and UI input coexist
+		PC->bShowMouseCursor = true;
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
+		PC->SetInputMode(InputMode);
+
 		// Create the always-visible hotbar widget
 		if (HotbarWidgetClass)
 		{
@@ -246,30 +253,11 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 void ABaseCharacter::ShowUICursor()
 {
 	++UIOpenCount;
-	if (UIOpenCount == 1)
-	{
-		if (APlayerController* PC = Cast<APlayerController>(GetController()))
-		{
-			PC->bShowMouseCursor = true;
-			FInputModeGameAndUI InputMode;
-			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-			InputMode.SetHideCursorDuringCapture(false);
-			PC->SetInputMode(InputMode);
-		}
-	}
 }
 
 void ABaseCharacter::HideUICursor()
 {
 	UIOpenCount = FMath::Max(0, UIOpenCount - 1);
-	if (UIOpenCount == 0)
-	{
-		if (APlayerController* PC = Cast<APlayerController>(GetController()))
-		{
-			PC->bShowMouseCursor = false;
-			PC->SetInputMode(FInputModeGameOnly());
-		}
-	}
 }
 
 void ABaseCharacter::RegisterTooltip(UUserWidget* Tooltip)
@@ -303,10 +291,8 @@ void ABaseCharacter::ToggleHealthUI_Implementation()
 		if (HealthHUDInstance)
 		{
 			HealthHUDInstance->AddToViewport(10);
-			// Set initial position — fixes the "fill screen" issue on first spawn
 			const FVector2D InitialPos(50.f, 50.f);
 			HealthHUDInstance->SetPositionInViewport(InitialPos, false);
-			// Tell the widget where it is so the drag system starts from the correct position
 			HealthHUDInstance->InitDragPosition(InitialPos);
 			ShowUICursor();
 		}
@@ -625,11 +611,8 @@ void ABaseCharacter::OnAttackPressed()
 	// Don't interrupt an in-progress traversal action (vault, climb, etc.)
 	if (bIsTraversing) return;
 
-	// Don't attack while any UI cursor is visible (inventory, health HUD, etc.)
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		if (PC->bShowMouseCursor) return;
-	}
+	// Don't attack while any UI panel is open (inventory, crafting, health HUD, etc.)
+	if (UIOpenCount > 0) return;
 
 	bIsAttacking = true;
 
