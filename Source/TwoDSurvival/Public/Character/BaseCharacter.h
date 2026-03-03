@@ -351,6 +351,14 @@ private:
 	/** Scans all UItemDefinition assets via AssetRegistry and builds ItemDefMap. */
 	void ScanItemDefinitions();
 
+	// Dynamic material instances for all slots on the character mesh.
+	// Created in BeginPlay so we can push the CharacterForward parameter each tick.
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> CharacterMIDs;
+
+	// Last forward vector pushed to the materials — skips redundant updates.
+	FVector LastForwardForMaterial = FVector::ZeroVector;
+
 	FTimerHandle AttackCooldownTimer;
 	FTimerHandle UnarmedHitTimer;
 

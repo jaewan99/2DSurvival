@@ -169,11 +169,36 @@ void ABaseCharacter::BeginPlay()
 
 	// Auto-scan all item definitions via AssetRegistry
 	ScanItemDefinitions();
+
+	// Create dynamic material instances on every mesh slot so we can drive
+	// the CharacterForward parameter for the backside-darkening shader.
+	if (USkeletalMeshComponent* Mesh = GetMesh())
+	{
+		const int32 NumMats = Mesh->GetNumMaterials();
+		CharacterMIDs.Reserve(NumMats);
+		for (int32 i = 0; i < NumMats; i++)
+		{
+			CharacterMIDs.Add(Mesh->CreateAndSetMaterialInstanceDynamic(i));
+		}
+	}
 }
 
 void ABaseCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Push the current facing direction to the backside-darkening material.
+	// Only update when the forward vector actually changes (character turned around).
+	const FVector CurrentForward = GetActorForwardVector();
+	if (!CurrentForward.Equals(LastForwardForMaterial, 0.01f))
+	{
+		LastForwardForMaterial = CurrentForward;
+		const FLinearColor ForwardParam(CurrentForward.X, CurrentForward.Y, CurrentForward.Z, 0.f);
+		for (UMaterialInstanceDynamic* MID : CharacterMIDs)
+		{
+			if (MID) MID->SetVectorParameterValue(TEXT("CharacterForward"), ForwardParam);
+		}
+	}
 }
 
 void ABaseCharacter::Jump()
