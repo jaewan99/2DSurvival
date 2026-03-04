@@ -39,7 +39,7 @@ void ATimeManager::Tick(float DeltaTime)
 
 	if (DayDurationSeconds <= 0.f) return;
 
-	TimeOfDay += DeltaTime / DayDurationSeconds;
+	TimeOfDay += DeltaTime * TimeScale / DayDurationSeconds;
 	if (TimeOfDay >= 1.f) TimeOfDay -= 1.f;
 
 	const bool bIsNightNow = IsNight();
@@ -71,6 +71,11 @@ bool ATimeManager::IsNight() const
 float ATimeManager::GetHour() const
 {
 	return TimeOfDay * 24.f;
+}
+
+void ATimeManager::SetTimeScale(float NewScale)
+{
+	TimeScale = FMath::Max(0.f, NewScale);
 }
 
 void ATimeManager::SetDaylight(float NewSunriseTime, float NewSunsetTime)

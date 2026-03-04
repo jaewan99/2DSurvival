@@ -44,6 +44,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable", meta = (EditCondition = "ItemCategory == EItemCategory::Consumable"))
 	float HealthRestoreAmount = 0.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable", meta = (EditCondition = "ItemCategory == EItemCategory::Consumable"))
+	float HungerRestore = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable", meta = (EditCondition = "ItemCategory == EItemCategory::Consumable"))
+	float ThirstRestore = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable", meta = (EditCondition = "ItemCategory == EItemCategory::Consumable"))
+	float FatigueRestore = 0.f;
+
 	// If true, this item can be placed in the hotbar.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	bool bCanBeEquipped = false;

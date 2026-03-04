@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Combat/DamageableInterface.h"
+#include "Components/NeedsComponent.h"
 #include "BaseCharacter.generated.h"
 
 class USpringArmComponent;
@@ -21,6 +22,7 @@ class UHealthHUDWidget;
 class UHotbarWidget;
 class UCraftingComponent;
 class UCraftingWidget;
+class UNeedsWarningWidget;
 
 enum class EBodyPart : uint8;
 
@@ -52,6 +54,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crafting")
 	UCraftingComponent* CraftingComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Needs")
+	UNeedsComponent* NeedsComponent;
 
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -144,6 +149,22 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Crafting")
 	void CloseCrafting();
 	virtual void CloseCrafting_Implementation();
+
+	/**
+	 * Locks movement and tells NeedsComponent to restore Fatigue instead of draining it.
+	 * Called by ABedActor when the player presses E on a bed.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Needs")
+	void StartSleeping();
+	virtual void StartSleeping_Implementation();
+
+	/**
+	 * Unlocks movement and stops sleeping. Recalculates movement speed.
+	 * Called by ABedActor on second press or when Fatigue reaches 100.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Needs")
+	void StopSleeping();
+	virtual void StopSleeping_Implementation();
 
 	/**
 	 * Called when a container interaction completes (e.g. hold E on a chest).
@@ -253,6 +274,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<UAnimMontage> DeathMontage;
 
+	/** How many times faster in-game time runs while the player is sleeping. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Needs")
+	float SleepTimeScale = 20.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save")
 	FString SaveSlotName = TEXT("SaveSlot0");
 
@@ -278,6 +303,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UCraftingWidget> CraftingWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UNeedsWarningWidget> NeedsWarningWidgetClass;
 
 private:
 	// Maps ItemID → ItemDefinition for fast lookup during load. Built in BeginPlay via AssetRegistry scan.
@@ -338,6 +366,13 @@ private:
 	UFUNCTION()
 	void OnAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
+	// Recalculates MaxWalkSpeed from BaseWalkSpeed × health multiplier × needs multiplier.
+	void RecalculateMovementSpeed();
+
+	// Bound to NeedsComponent->OnNeedChanged — triggers speed recalculation on need change.
+	UFUNCTION()
+	void OnNeedChanged(ENeedType NeedType, float CurrentValue, float MaxValue, bool bIsWarning);
+
 	// Widget instances
 	UPROPERTY()
 	UHealthHUDWidget* HealthHUDInstance;
@@ -347,6 +382,9 @@ private:
 
 	UPROPERTY()
 	UCraftingWidget* CraftingWidgetInstance;
+
+	UPROPERTY()
+	UNeedsWarningWidget* NeedsWarningInstance;
 
 	/** Scans all UItemDefinition assets via AssetRegistry and builds ItemDefMap. */
 	void ScanItemDefinitions();

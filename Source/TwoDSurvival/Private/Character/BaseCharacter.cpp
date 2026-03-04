@@ -22,7 +22,9 @@
 #include "UI/HealthHUDWidget.h"
 #include "UI/HotbarWidget.h"
 #include "UI/CraftingWidget.h"
+#include "UI/NeedsWarningWidget.h"
 #include "Crafting/CraftingComponent.h"
+#include "World/TimeManager.h"
 // DamageableInterface included via BaseCharacter.h
 
 ABaseCharacter::ABaseCharacter()
@@ -66,6 +68,9 @@ ABaseCharacter::ABaseCharacter()
 
 	// Crafting component — recipe scanning and craft execution
 	CraftingComponent = CreateDefaultSubobject<UCraftingComponent>(TEXT("CraftingComponent"));
+
+	// Needs component — tracks Hunger, Thirst, Fatigue over time
+	NeedsComponent = CreateDefaultSubobject<UNeedsComponent>(TEXT("NeedsComponent"));
 
 	// Don't auto-rotate toward movement direction — MoveRight handles rotation
 	GetCharacterMovement()->bOrientRotationToMovement = false;
@@ -147,6 +152,9 @@ void ABaseCharacter::BeginPlay()
 	// Handle player death — disable input, play montage, fire BP event.
 	HealthComponent->OnDeath.AddDynamic(this, &ABaseCharacter::HandlePlayerDeath);
 
+	// Bind needs delegate — recalculates movement speed whenever any need changes
+	NeedsComponent->OnNeedChanged.AddDynamic(this, &ABaseCharacter::OnNeedChanged);
+
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		// Always show the mouse cursor — GameAndUI lets game input and UI input coexist
@@ -163,6 +171,16 @@ void ABaseCharacter::BeginPlay()
 			if (HotbarWidgetInstance)
 			{
 				HotbarWidgetInstance->AddToViewport(0);
+			}
+		}
+
+		// Create the always-visible needs warning widget (positions itself in NativeConstruct)
+		if (NeedsWarningWidgetClass)
+		{
+			NeedsWarningInstance = CreateWidget<UNeedsWarningWidget>(PC, NeedsWarningWidgetClass);
+			if (NeedsWarningInstance)
+			{
+				NeedsWarningInstance->AddToViewport(1);
 			}
 		}
 	}
@@ -199,6 +217,18 @@ void ABaseCharacter::Tick(float DeltaTime)
 			if (MID) MID->SetVectorParameterValue(TEXT("CharacterForward"), ForwardParam);
 		}
 	}
+
+	// While sleeping, forcibly halt movement every tick.
+	// Blueprint movement input bypasses bMovementLocked, so we zero velocity here as a guarantee.
+	if (NeedsComponent && NeedsComponent->bIsSleeping)
+	{
+		GetCharacterMovement()->StopMovementImmediately();
+		return;
+	}
+
+	// Double the drain rate when running (~100 cm/s) or attacking
+	const bool bIsMovingFast = GetVelocity().SizeSquared() > 10000.f;
+	NeedsComponent->SetActiveMovement(bIsMovingFast || bIsAttacking);
 }
 
 void ABaseCharacter::Jump()
@@ -355,6 +385,57 @@ void ABaseCharacter::CloseCrafting_Implementation()
 	HideUICursor();
 }
 
+void ABaseCharacter::StartSleeping_Implementation()
+{
+	bMovementLocked = true;
+
+	// Set bIsSleeping BEFORE SetMovementMode — MOVE_None triggers an overlap recalc that
+	// fires OnBoxEndOverlap on the bed's InteractionBox. The guard there checks bIsSleeping
+	// to avoid immediately waking the player due to that physics artifact.
+	if (NeedsComponent)
+	{
+		NeedsComponent->SleepStartFatigue = NeedsComponent->GetNeedValue(ENeedType::Fatigue);
+		NeedsComponent->bIsSleeping = true;
+		NeedsComponent->SleepTimeScaleMultiplier = SleepTimeScale;
+	}
+
+	// Block all AddMovementInput calls (C++ and Blueprint paths)
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		PC->SetIgnoreMoveInput(true);
+
+	// Disable movement mode — prevents root motion from driving movement
+	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_None);
+
+	// Speed up the world clock so morning arrives faster
+	if (ATimeManager* TM = Cast<ATimeManager>(UGameplayStatics::GetActorOfClass(this, ATimeManager::StaticClass())))
+		TM->SetTimeScale(SleepTimeScale);
+}
+
+void ABaseCharacter::StopSleeping_Implementation()
+{
+	bMovementLocked = false;
+
+	// Restore movement input and physics
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		PC->SetIgnoreMoveInput(false);
+
+	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
+
+	if (NeedsComponent)
+	{
+		NeedsComponent->bIsSleeping = false;
+		NeedsComponent->SleepTimeScaleMultiplier = 1.f;
+	}
+
+	// Restore normal time flow
+	if (ATimeManager* TM = Cast<ATimeManager>(UGameplayStatics::GetActorOfClass(this, ATimeManager::StaticClass())))
+	{
+		TM->SetTimeScale(1.f);
+	}
+
+	RecalculateMovementSpeed();
+}
+
 void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent* FromInventory)
 {
 	if (!FromInventory) return;
@@ -364,6 +445,14 @@ void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent
 	if (Slot.ItemDef->ItemCategory != EItemCategory::Consumable) return;
 
 	HealthComponent->RestoreHealth(EBodyPart::Body, Slot.ItemDef->HealthRestoreAmount);
+
+	if (NeedsComponent)
+	{
+		if (Slot.ItemDef->HungerRestore  > 0.f) NeedsComponent->RestoreNeed(ENeedType::Hunger,  Slot.ItemDef->HungerRestore);
+		if (Slot.ItemDef->ThirstRestore  > 0.f) NeedsComponent->RestoreNeed(ENeedType::Thirst,  Slot.ItemDef->ThirstRestore);
+		if (Slot.ItemDef->FatigueRestore > 0.f) NeedsComponent->RestoreNeed(ENeedType::Fatigue, Slot.ItemDef->FatigueRestore);
+	}
+
 	FromInventory->RemoveItem(SlotIndex, 1);
 
 	const FBodyPartHealth BodyPart = HealthComponent->GetBodyPart(EBodyPart::Body);
@@ -410,12 +499,27 @@ void ABaseCharacter::UnequipWeapon_Implementation()
 	}
 }
 
+void ABaseCharacter::RecalculateMovementSpeed()
+{
+	// Movement mode is MOVE_None while sleeping — MaxWalkSpeed is irrelevant, skip
+	if (NeedsComponent && NeedsComponent->bIsSleeping) return;
+
+	const float HealthMult = HealthComponent ? HealthComponent->GetMovementSpeedMultiplier() : 1.f;
+	const float NeedsMult  = NeedsComponent  ? NeedsComponent->GetSpeedMultiplier()          : 1.f;
+	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * HealthMult * NeedsMult;
+}
+
+void ABaseCharacter::OnNeedChanged(ENeedType NeedType, float CurrentValue, float MaxValue, bool bIsWarning)
+{
+	RecalculateMovementSpeed();
+}
+
 void ABaseCharacter::OnBodyPartDamaged(EBodyPart Part, float CurrentHealth, float MaxHealth, bool bJustBroken)
 {
 	// Recalculate movement speed whenever a leg takes damage.
 	if (Part == EBodyPart::LeftLeg || Part == EBodyPart::RightLeg)
 	{
-		GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * HealthComponent->GetMovementSpeedMultiplier();
+		RecalculateMovementSpeed();
 	}
 	// Note: OnDeath is broadcast directly from UHealthComponent::ApplyDamage when Head/Body breaks.
 	// No need to broadcast it here — doing so would cause HandlePlayerDeath to fire twice.
@@ -477,6 +581,11 @@ void ABaseCharacter::SaveGame_Implementation()
 	// Position
 	SaveObj->PlayerLocation = GetActorLocation();
 	SaveObj->PlayerRotation = GetActorRotation();
+
+	// Needs
+	SaveObj->SavedHunger  = NeedsComponent->GetNeedValue(ENeedType::Hunger);
+	SaveObj->SavedThirst  = NeedsComponent->GetNeedValue(ENeedType::Thirst);
+	SaveObj->SavedFatigue = NeedsComponent->GetNeedValue(ENeedType::Fatigue);
 
 	UGameplayStatics::SaveGameToSlot(SaveObj, SaveSlotName, SaveUserIndex);
 	UE_LOG(LogTemp, Log, TEXT("Game saved to slot: %s"), *SaveSlotName);
@@ -574,8 +683,13 @@ void ABaseCharacter::LoadGame_Implementation()
 		}
 	}
 
-	// Recalculate movement speed in case legs were damaged
-	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * HealthComponent->GetMovementSpeedMultiplier();
+	// Restore needs
+	NeedsComponent->SetNeedValue(ENeedType::Hunger,  SaveObj->SavedHunger);
+	NeedsComponent->SetNeedValue(ENeedType::Thirst,  SaveObj->SavedThirst);
+	NeedsComponent->SetNeedValue(ENeedType::Fatigue, SaveObj->SavedFatigue);
+
+	// Recalculate movement speed accounting for leg damage and needs
+	RecalculateMovementSpeed();
 
 	UE_LOG(LogTemp, Log, TEXT("Game loaded from slot: %s"), *SaveSlotName);
 }
@@ -732,8 +846,10 @@ void ABaseCharacter::PerformUnarmedHit()
 		if (!HitActor) continue;
 		if (!HitActor->GetClass()->ImplementsInterface(UDamageable::StaticClass())) continue;
 
-		IDamageable::Execute_TakeMeleeDamage(HitActor, UnarmedDamage, this);
-		UE_LOG(LogTemp, Log, TEXT("Punch: Hit %s for %.1f damage"), *HitActor->GetName(), UnarmedDamage);
+		const float NeedsMult = NeedsComponent ? NeedsComponent->GetDamageMultiplier() : 1.f;
+		const float FinalDamage = UnarmedDamage * NeedsMult;
+		IDamageable::Execute_TakeMeleeDamage(HitActor, FinalDamage, this);
+		UE_LOG(LogTemp, Log, TEXT("Punch: Hit %s for %.1f damage (needs mult=%.2f)"), *HitActor->GetName(), FinalDamage, NeedsMult);
 		break; // Punch hits one target at a time
 	}
 }

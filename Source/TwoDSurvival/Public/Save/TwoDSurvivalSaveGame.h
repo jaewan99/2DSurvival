@@ -79,4 +79,13 @@ public:
 
 	UPROPERTY()
 	FRotator PlayerRotation = FRotator::ZeroRotator;
+
+	UPROPERTY()
+	float SavedHunger = 100.f;
+
+	UPROPERTY()
+	float SavedThirst = 100.f;
+
+	UPROPERTY()
+	float SavedFatigue = 100.f;
 };

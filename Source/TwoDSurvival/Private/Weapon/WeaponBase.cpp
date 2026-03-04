@@ -4,6 +4,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Combat/DamageableInterface.h"
+#include "Character/BaseCharacter.h"
+#include "Components/NeedsComponent.h"
 
 AWeaponBase::AWeaponBase()
 {
@@ -77,7 +79,17 @@ void AWeaponBase::OnHitboxOverlap(
 
 	HitActorsThisSwing.Add(OtherActor);
 
-	const float FinalDamage = BaseDamage * StoredDamageMultiplier;
+	// Apply needs damage penalty if the wielder has a NeedsComponent
+	float NeedsMultiplier = 1.f;
+	if (ABaseCharacter* WielderChar = Cast<ABaseCharacter>(GetOwner()))
+	{
+		if (WielderChar->NeedsComponent)
+		{
+			NeedsMultiplier = WielderChar->NeedsComponent->GetDamageMultiplier();
+		}
+	}
+
+	const float FinalDamage = BaseDamage * StoredDamageMultiplier * NeedsMultiplier;
 	IDamageable::Execute_TakeMeleeDamage(OtherActor, FinalDamage, GetOwner());
 
 	UE_LOG(LogTemp, Log, TEXT("WeaponBase: Hit %s for %.1f damage"), *OtherActor->GetName(), FinalDamage);

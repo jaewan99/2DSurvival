@@ -106,6 +106,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Time")
 	void SetDaylight(float NewSunriseTime, float NewSunsetTime);
 
+	/**
+	 * Multiplier applied to time progression each tick.
+	 * 1.0 = normal speed. 20.0 = time passes 20x faster (used during sleep).
+	 * Tunable in BP_TimeManager Details or set at runtime via SetTimeScale.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Time")
+	float TimeScale = 1.f;
+
+	/** Set the time scale at runtime (called by BaseCharacter on sleep/wake). */
+	UFUNCTION(BlueprintCallable, Category = "Time")
+	void SetTimeScale(float NewScale);
+
 	UPROPERTY(BlueprintAssignable, Category = "Time")
 	FOnDayPhaseChanged OnDayPhaseChanged;
 
