@@ -172,13 +172,13 @@ void ABaseCharacter::BeginPlay()
 
 	// Create dynamic material instances on every mesh slot so we can drive
 	// the CharacterForward parameter for the backside-darkening shader.
-	if (USkeletalMeshComponent* Mesh = GetMesh())
+	if (USkeletalMeshComponent* SkelMesh = GetMesh())
 	{
-		const int32 NumMats = Mesh->GetNumMaterials();
+		const int32 NumMats = SkelMesh->GetNumMaterials();
 		CharacterMIDs.Reserve(NumMats);
 		for (int32 i = 0; i < NumMats; i++)
 		{
-			CharacterMIDs.Add(Mesh->CreateAndSetMaterialInstanceDynamic(i));
+			CharacterMIDs.Add(SkelMesh->CreateAndSetMaterialInstanceDynamic(i));
 		}
 	}
 }
