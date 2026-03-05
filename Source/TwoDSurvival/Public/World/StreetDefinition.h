@@ -6,6 +6,8 @@
 #include "Engine/DataAsset.h"
 #include "StreetDefinition.generated.h"
 
+class UBuildingDefinition;
+
 UENUM(BlueprintType)
 enum class EExitDirection : uint8
 {
@@ -50,6 +52,16 @@ public:
 	// Up exits are intentional gates (door/ladder) — still uses an interactable actor.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Exits")
 	TObjectPtr<UStreetDefinition> ExitUp;
+
+	// If true, this definition represents a PCG-generated building interior (not a street).
+	// UStreetManager will inject PCG parameters and teleport the player on entry/exit.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building")
+	bool bIsPCGBuilding = false;
+
+	// Building parameters passed into the PCG graph. Only used when bIsPCGBuilding = true.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building",
+		meta = (EditCondition = "bIsPCGBuilding"))
+	TObjectPtr<UBuildingDefinition> BuildingDefinition;
 
 	// Returns the connected street for the given direction. Null = blocked.
 	UStreetDefinition* GetExit(EExitDirection Direction) const;

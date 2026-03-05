@@ -2,14 +2,25 @@
 
 #include "World/StreetManager.h"
 #include "Engine/LevelStreamingDynamic.h"
+#include "Engine/Level.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "World/BuildingDefinition.h"
+#include "World/BuildingEntrance.h"
+#include "World/BuildingGenerator.h"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UStreetManager::InitializeWithStreet(UStreetDefinition* StartStreet, FVector WorldOffset)
 {
 	if (!StartStreet) return;
 
-	PendingStreet  = StartStreet;
-	PendingOffset  = WorldOffset;
-	StreamingToUnload = nullptr;
+	PendingStreet         = StartStreet;
+	PendingOffset         = WorldOffset;
+	PendingTransitionType = ETransitionType::Street;
+	StreamingToUnload     = nullptr;
 
 	LoadStreet(StartStreet, WorldOffset);
 }
@@ -23,25 +34,93 @@ void UStreetManager::OnPlayerCrossedExit(EExitDirection Direction)
 		return;
 	}
 
+	bTransitionInProgress = true;
+
+	if (Direction == EExitDirection::Up)
+	{
+		if (bIsInsideBuilding)
+		{
+			// ── Exit building → return to street ────────────────────────────
+			if (!ReturnStreet)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[StreetManager] ExitBuilding: no ReturnStreet saved."));
+				bTransitionInProgress = false;
+				return;
+			}
+
+			UE_LOG(LogTemp, Log, TEXT("[StreetManager] Exiting building — returning to '%s'."),
+				*ReturnStreet->StreetID.ToString());
+
+			PendingTransitionType = ETransitionType::ExitBuilding;
+			StreamingToUnload     = ActiveStreaming;
+			PendingStreet         = ReturnStreet;
+			PendingOffset         = ReturnStreetOffset;
+
+			LoadStreet(ReturnStreet, ReturnStreetOffset);
+		}
+		else
+		{
+			// ── Enter building ───────────────────────────────────────────────
+			UStreetDefinition* Building = CurrentStreet->GetExit(EExitDirection::Up);
+			if (!Building)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[StreetManager] No building exit on '%s'."),
+					*CurrentStreet->StreetID.ToString());
+				bTransitionInProgress = false;
+				return;
+			}
+
+			if (!Building->bIsPCGBuilding)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[StreetManager] ExitUp '%s' is not flagged as a PCG building."),
+					*Building->StreetID.ToString());
+				bTransitionInProgress = false;
+				return;
+			}
+
+			UE_LOG(LogTemp, Log, TEXT("[StreetManager] Entering building '%s'."),
+				*Building->StreetID.ToString());
+
+			// Save state needed to return
+			ReturnStreet         = CurrentStreet;
+			ReturnStreetOffset   = CurrentStreetWorldOffset;
+			ReturnPlayerLocation = GetPlayerLocation();
+
+			PendingTransitionType = ETransitionType::EnterBuilding;
+			StreamingToUnload     = ActiveStreaming;
+			PendingStreet         = Building;
+			PendingOffset         = FVector(BuildingWorldX, 0.f, 0.f);
+
+			LoadStreet(Building, FVector(BuildingWorldX, 0.f, 0.f));
+		}
+		return;
+	}
+
+	// ── Left / Right ─────────────────────────────────────────────────────────
 	UStreetDefinition* NextStreet = CurrentStreet->GetExit(Direction);
 	if (!NextStreet)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[StreetManager] Exit %d is blocked — no adjacent street."), (int32)Direction);
+		bTransitionInProgress = false;
 		return;
 	}
 
 	const FVector NextOffset = ComputeAdjacentOffset(Direction, NextStreet);
 
-	UE_LOG(LogTemp, Log, TEXT("[StreetManager] Player crossed %d — streaming '%s' at offset X=%.0f."),
+	UE_LOG(LogTemp, Log, TEXT("[StreetManager] Player crossed %d — streaming '%s' at X=%.0f."),
 		(int32)Direction, *NextStreet->StreetID.ToString(), NextOffset.X);
 
-	bTransitionInProgress = true;
-	StreamingToUnload = ActiveStreaming;
-	PendingStreet     = NextStreet;
-	PendingOffset     = NextOffset;
+	PendingTransitionType = ETransitionType::Street;
+	StreamingToUnload     = ActiveStreaming;
+	PendingStreet         = NextStreet;
+	PendingOffset         = NextOffset;
 
 	LoadStreet(NextStreet, NextOffset);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Private — streaming
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UStreetManager::LoadStreet(UStreetDefinition* Street, FVector WorldOffset)
 {
@@ -82,7 +161,7 @@ void UStreetManager::OnNewStreetShown()
 		PendingStreaming->OnLevelShown.RemoveDynamic(this, &UStreetManager::OnNewStreetShown);
 	}
 
-	// Unload the previous street
+	// Unload the previous sublevel
 	if (StreamingToUnload)
 	{
 		StreamingToUnload->SetShouldBeLoaded(false);
@@ -90,18 +169,43 @@ void UStreetManager::OnNewStreetShown()
 		StreamingToUnload = nullptr;
 	}
 
-	// Commit the new street as current
-	ActiveStreaming           = PendingStreaming;
-	CurrentStreet             = PendingStreet;
-	CurrentStreetWorldOffset  = PendingOffset;
+	// Commit new state
+	ActiveStreaming          = PendingStreaming;
+	CurrentStreet            = PendingStreet;
+	CurrentStreetWorldOffset = PendingOffset;
+	PendingStreaming          = nullptr;
+	PendingStreet             = nullptr;
+	bTransitionInProgress     = false;
 
-	PendingStreaming = nullptr;
-	PendingStreet   = nullptr;
-	bTransitionInProgress = false;
+	ULevel* LoadedLevel = ActiveStreaming ? ActiveStreaming->GetLoadedLevel() : nullptr;
 
-	UE_LOG(LogTemp, Log, TEXT("[StreetManager] Now in '%s' at X=%.0f."),
-		*CurrentStreet->StreetID.ToString(), CurrentStreetWorldOffset.X);
+	// ── Post-load behaviour per transition type ───────────────────────────────
+	switch (PendingTransitionType)
+	{
+	case ETransitionType::EnterBuilding:
+		bIsInsideBuilding = true;
+		TeleportPlayerToBuildingEntrance(LoadedLevel);
 
+		UE_LOG(LogTemp, Log, TEXT("[StreetManager] Entered building '%s'."),
+			*CurrentStreet->StreetID.ToString());
+		break;
+
+	case ETransitionType::ExitBuilding:
+		bIsInsideBuilding = false;
+		TeleportPlayerToLocation(ReturnPlayerLocation);
+		ReturnStreet = nullptr;
+
+		UE_LOG(LogTemp, Log, TEXT("[StreetManager] Exited building — back on '%s' at X=%.0f."),
+			*CurrentStreet->StreetID.ToString(), CurrentStreetWorldOffset.X);
+		break;
+
+	default:
+		UE_LOG(LogTemp, Log, TEXT("[StreetManager] Now in '%s' at X=%.0f."),
+			*CurrentStreet->StreetID.ToString(), CurrentStreetWorldOffset.X);
+		break;
+	}
+
+	PendingTransitionType = ETransitionType::Street;
 	OnStreetChanged.Broadcast();
 }
 
@@ -112,21 +216,94 @@ FVector UStreetManager::ComputeAdjacentOffset(EExitDirection Direction, UStreetD
 	switch (Direction)
 	{
 	case EExitDirection::Right:
-		// Adjacent street starts where the current one ends
 		Offset.X += CurrentStreet->StreetWidth;
 		break;
 
 	case EExitDirection::Left:
-		// Adjacent street ends where the current one starts
 		Offset.X -= AdjacentStreet->StreetWidth;
 		break;
 
-	case EExitDirection::Up:
-		// Up transitions are intentional gates handled by a separate interactable.
-		// UStreetManager does not handle seamless streaming for Up yet.
-		UE_LOG(LogTemp, Warning, TEXT("[StreetManager] Up direction streaming not yet implemented."));
+	default:
 		break;
 	}
 
 	return Offset;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Private — building helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+void UStreetManager::TriggerBuildingGeneration(ULevel* Level)
+{
+	if (!Level) return;
+
+	for (AActor* Actor : Level->Actors)
+	{
+		if (ABuildingGenerator* Generator = Cast<ABuildingGenerator>(Actor))
+		{
+			Generator->Generate();
+			return;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[StreetManager] TriggerBuildingGeneration: no ABuildingGenerator found in building level."));
+}
+
+void UStreetManager::TeleportPlayerToBuildingEntrance(ULevel* Level)
+{
+	if (!Level) return;
+
+	UWorld* World = GetGameInstance()->GetWorld();
+	if (!World) return;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (!PC || !PC->GetPawn()) return;
+
+	// Find the ABuildingEntrance actor placed in the building sublevel — it acts as the spawn point.
+	for (AActor* Actor : Level->Actors)
+	{
+		if (ABuildingEntrance* Entrance = Cast<ABuildingEntrance>(Actor))
+		{
+			PC->GetPawn()->SetActorLocation(
+				Entrance->GetActorLocation(),
+				/*bSweep=*/false,
+				/*OutSweepHitResult=*/nullptr,
+				ETeleportType::TeleportPhysics);
+
+			UE_LOG(LogTemp, Log, TEXT("[StreetManager] Teleported player to building entrance at %s."),
+				*Entrance->GetActorLocation().ToString());
+			return;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[StreetManager] TeleportPlayerToBuildingEntrance: no ABuildingEntrance found in level."));
+}
+
+void UStreetManager::TeleportPlayerToLocation(FVector Location)
+{
+	UWorld* World = GetGameInstance()->GetWorld();
+	if (!World) return;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (!PC || !PC->GetPawn()) return;
+
+	PC->GetPawn()->SetActorLocation(
+		Location,
+		/*bSweep=*/false,
+		/*OutSweepHitResult=*/nullptr,
+		ETeleportType::TeleportPhysics);
+
+	UE_LOG(LogTemp, Log, TEXT("[StreetManager] Teleported player to %s."), *Location.ToString());
+}
+
+FVector UStreetManager::GetPlayerLocation() const
+{
+	UWorld* World = GetGameInstance()->GetWorld();
+	if (!World) return FVector::ZeroVector;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (!PC || !PC->GetPawn()) return FVector::ZeroVector;
+
+	return PC->GetPawn()->GetActorLocation();
 }
