@@ -2,6 +2,7 @@
 
 #include "World/BuildingGenerator.h"
 #include "World/BuildingDefinition.h"
+#include "World/VerticalTransport.h"
 #include "Engine/World.h"
 
 ABuildingGenerator::ABuildingGenerator()
@@ -41,20 +42,31 @@ void ABuildingGenerator::Generate()
 			const FVector WorldPos = Origin + FVector(LocalX, 0.f, LocalZ);
 
 			// Pick which actor class to spawn at this cell
+			const bool bIsStairCell     = FMath::IsNearlyEqual(LocalX, BuildingDef->StairX, 1.f);
+			const bool bIsElevatorCell  = BuildingDef->bHasElevator && FMath::IsNearlyEqual(LocalX, BuildingDef->ElevatorX, 1.f);
+			const bool bIsTopFloor      = (Floor == BuildingDef->FloorCount - 1);
+
 			TSubclassOf<AActor> ClassToSpawn = BuildingDef->RoomActorClass;
 
-			if (FMath::IsNearlyEqual(LocalX, BuildingDef->StairX, 1.f))
+			if (bIsStairCell && !bIsTopFloor)
 			{
+				// Stairs connect this floor to the one above — don't place on the top floor.
 				ClassToSpawn = BuildingDef->StairsActorClass;
 			}
-			else if (BuildingDef->bHasElevator && FMath::IsNearlyEqual(LocalX, BuildingDef->ElevatorX, 1.f))
+			else if (bIsElevatorCell)
 			{
 				ClassToSpawn = BuildingDef->ElevatorRoomActorClass;
 			}
 
 			if (ClassToSpawn)
 			{
-				SpawnRoomAt(ClassToSpawn, WorldPos);
+				AActor* Spawned = SpawnRoomAt(ClassToSpawn, WorldPos);
+
+				// Pass FloorHeight so the transport's InteractionBox spans both floor levels.
+				if (AVerticalTransport* Transport = Cast<AVerticalTransport>(Spawned))
+				{
+					Transport->SetFloorHeight(BuildingDef->FloorHeight);
+				}
 			}
 		}
 	}
@@ -63,7 +75,7 @@ void ABuildingGenerator::Generate()
 		SpawnedActors.Num(), *GetName(), BuildingDef->FloorCount, BuildingDef->RoomsPerFloor);
 }
 
-void ABuildingGenerator::SpawnRoomAt(TSubclassOf<AActor> ActorClass, FVector WorldPosition)
+AActor* ABuildingGenerator::SpawnRoomAt(TSubclassOf<AActor> ActorClass, FVector WorldPosition)
 {
 	FActorSpawnParameters Params;
 	Params.Owner = this;
@@ -80,4 +92,5 @@ void ABuildingGenerator::SpawnRoomAt(TSubclassOf<AActor> ActorClass, FVector Wor
 		}
 		SpawnedActors.Add(Spawned);
 	}
+	return Spawned;
 }

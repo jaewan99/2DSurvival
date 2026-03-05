@@ -43,5 +43,6 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<AActor>> SpawnedActors;
 
-	void SpawnRoomAt(TSubclassOf<AActor> ActorClass, FVector WorldPosition);
+	// Returns the spawned actor so the caller can configure it (e.g. set FloorHeight).
+	AActor* SpawnRoomAt(TSubclassOf<AActor> ActorClass, FVector WorldPosition);
 };
