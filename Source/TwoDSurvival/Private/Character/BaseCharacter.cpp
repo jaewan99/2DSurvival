@@ -23,6 +23,7 @@
 #include "UI/HotbarWidget.h"
 #include "UI/CraftingWidget.h"
 #include "UI/NeedsWarningWidget.h"
+#include "UI/StreetHUDWidget.h"
 #include "Crafting/CraftingComponent.h"
 #include "World/TimeManager.h"
 // DamageableInterface included via BaseCharacter.h
@@ -181,6 +182,16 @@ void ABaseCharacter::BeginPlay()
 			if (NeedsWarningInstance)
 			{
 				NeedsWarningInstance->AddToViewport(1);
+			}
+		}
+
+		// Create the always-visible street exit direction HUD
+		if (StreetHUDWidgetClass)
+		{
+			StreetHUDInstance = CreateWidget<UStreetHUDWidget>(PC, StreetHUDWidgetClass);
+			if (StreetHUDInstance)
+			{
+				StreetHUDInstance->AddToViewport(0);
 			}
 		}
 	}

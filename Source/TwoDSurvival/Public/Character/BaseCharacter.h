@@ -23,6 +23,7 @@ class UHotbarWidget;
 class UCraftingComponent;
 class UCraftingWidget;
 class UNeedsWarningWidget;
+class UStreetHUDWidget;
 
 enum class EBodyPart : uint8;
 
@@ -307,6 +308,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UNeedsWarningWidget> NeedsWarningWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UStreetHUDWidget> StreetHUDWidgetClass;
+
 private:
 	// Maps ItemID → ItemDefinition for fast lookup during load. Built in BeginPlay via AssetRegistry scan.
 	UPROPERTY()
@@ -385,6 +389,9 @@ private:
 
 	UPROPERTY()
 	UNeedsWarningWidget* NeedsWarningInstance;
+
+	UPROPERTY()
+	UStreetHUDWidget* StreetHUDInstance;
 
 	/** Scans all UItemDefinition assets via AssetRegistry and builds ItemDefMap. */
 	void ScanItemDefinitions();

@@ -5,6 +5,10 @@ Items are loosely ordered by priority / dependency.
 ## Inventory & Equipment
 
 - [ ] **Weapon grip animation** — Layered Blend per Bone in AnimBP; blend a grip pose on upper body when `EquippedWeapon != null`. Needs one grip pose asset per weapon type created in Skeleton editor.
+- [ ] **Needs speed penalty — animation hookup** — `MaxWalkSpeed` is correctly reduced in C++ (via `RecalculateMovementSpeed`) but the visual movement speed depends on how the AnimBP is set up:
+  - If walk/run animations use **root motion**, MaxWalkSpeed alone won't change visual speed. Disable root motion on locomotion animations and let `AddMovementInput` + `MaxWalkSpeed` drive position.
+  - If root motion is already off, add `MovementSpeedMultiplier` (`BlueprintReadOnly`) to `ABaseCharacter`, set it alongside `MaxWalkSpeed` in `RecalculateMovementSpeed`, then read it in `ABP_Player → Event Blueprint Update Animation` and feed it into the locomotion blend space play rate.
+  - Either way, the AnimBP should drive blend space from `GetVelocity().Size()` so animation naturally reflects the capped speed.
 - [x] **Hotbar system (C++)** — `UHotbarComponent` on BaseCharacter, 6 slots, active index, `OnHotbarChanged` delegate, SelectSlot/CycleSlot, input bindings in BaseCharacter.
 - [x] **Hotbar widget (C++)** — `UHotbarWidget` builds 6 slots dynamically in NativeConstruct (border + icon + key label). Gold highlight on active slot. Always visible at bottom of screen.
 - [x] **Unequip from context menu** — right-click equipped weapon → show Unequip button → calls `UnequipWeapon()`.
@@ -84,6 +88,27 @@ Inspired by Project Zomboid — needs decay over time and affect gameplay stats.
 - [ ] **Satisfying needs** — consuming food items reduces Hunger (extend `UseItem`); water items reduce Thirst; sleeping (interact with bed) restores Fatigue over time.
 - [ ] **Needs HUD** — `WBP_NeedsHUD`: small always-visible (or H-toggled) panel showing icons + bars for each need. Color shifts yellow → red as value drops. Urgent needs pulse or show warning text.
 - [ ] **Mood modifiers** — positive events (eating a hot meal, completing a craft, finding rare loot) give a temporary Mood boost; negative events (taking damage, staying in darkness, witnessing death) reduce it.
+
+## World Map
+
+Each "map" is a street level. At the end of a street the player can transition to up to 3 adjacent streets (left/right/up). Blocked exits are hidden or greyed out. Streets are loaded/unloaded as the player moves between them.
+
+- [x] **Street data asset** — `UStreetDefinition` (UDataAsset): street name, background/tileset reference, up to 3 exit slots (`EExitDirection`: Left, Right, Up), each exit holds a `TSoftObjectPtr<UStreetDefinition>` to the destination street + optional lock condition.
+- [x] **Exit actor** — `AStreetExit` (C++ AActor + IInteractable): placed at each end of a street, reads its `ExitDirection` and target street from a property set in BP. If target is null or locked → collision blocks passage + no interaction prompt. If valid → prompt "Go [Direction]" → trigger street transition.
+- [x] **Street transition** — `UStreetManager` (UGameInstanceSubsystem): `TransitionToStreet(UStreetDefinition*, EExitDirection)`. Saves player state, opens target level, repositions player at the matching AStreetExit spawn point via one-tick deferred HandleStreetArrival.
+- [x] **Exit direction display** — `UStreetHUDWidget` (C++ UUserWidget): ArrowLeft/ArrowRight/ArrowUp Images shown/collapsed based on which AStreetExit actors have valid TargetStreet assigned.
+- [ ] **World map widget (optional)** — `WBP_WorldMap`: top-down node graph of visited streets, current position highlighted, connections drawn as lines. Toggle with M key.
+
+## NPC Interaction
+
+NPCs with unique roles (drug dealer, father, young girl, etc.) that the player can talk to or give items to in order to get what they need.
+
+- [ ] **NPC data asset** — `UNPCDefinition` (UDataAsset): NPC name, portrait texture, role tag, dialogue lines array (`TArray<FText>`), optional trade: `FNPCTradeOffer` (wants `UItemDefinition* RequiredItem + int32 Count`, gives `UItemDefinition* RewardItem + int32 Count`).
+- [ ] **NPC actor** — `ANPCActor` (C++ AActor + IInteractable): `UNPCDefinition* NPCDef` (EditAnywhere). Instant interaction → opens dialogue widget. Sprite/mesh assigned in Blueprint child.
+- [ ] **Dialogue widget** — `UDialogueWidget` (C++ UUserWidget): portrait on left, NPC name + current dialogue line on right, Next button cycles lines, Close button dismisses. If `NPCDef` has a trade offer, show a "Give Item" button (enabled only if player has the required item).
+- [ ] **Give item flow** — "Give Item" checks `InventoryComponent->CountItemByID(RequiredItemID) >= Count`; if true, calls `RemoveItemByID` + `TryAddItem(RewardItem)` + advances to a "thank you" dialogue line.
+- [ ] **NPC state persistence** — track per-NPC state (trade completed, dialogue stage) by NPC ID in `UTwoDSurvivalSaveGame`. Prevents re-trading after reload.
+- [ ] **Blueprint steps** — Create `WBP_Dialogue` (portrait Image, name Text, dialogue Text, Next/Give/Close buttons). Assign `DialogueWidgetClass` on `BP_BaseCharacter`. Create NPC Blueprint children (e.g. `BP_NPC_DrugDealer`, `BP_NPC_Father`) with mesh + `NPCDef` assigned.
 
 ## House Customization
 
