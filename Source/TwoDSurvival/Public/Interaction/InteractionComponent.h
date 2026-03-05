@@ -7,6 +7,7 @@
 #include "InteractionComponent.generated.h"
 
 class USphereComponent;
+class ADraggableProp;
 
 /**
  * Add this component to ABaseCharacter (or any ACharacter) to give it proximity-based interaction.
@@ -56,6 +57,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Interaction")
 	bool HasFocusedInteractable() const;
 
+	/**
+	 * Locks the focused interactable to a specific actor (used during prop dragging).
+	 * While locked, UpdateFocusedInteractable is a no-op — other actors cannot steal focus.
+	 * Also overrides InteractionPrompt to "Release" so the HUD reflects the release action.
+	 */
+	void LockFocus(AActor* Actor);
+
+	/**
+	 * Releases the focus lock and resumes normal closest-actor focus selection.
+	 * Call this when the drag is released.
+	 */
+	void UnlockFocus();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -71,6 +85,12 @@ private:
 	// The closest interactable — the one StartInteract acts on.
 	UPROPERTY()
 	AActor* FocusedInteractable;
+
+	// When true, FocusedInteractable is pinned to LockedFocusActor (drag mode).
+	bool bFocusLocked = false;
+
+	UPROPERTY()
+	AActor* LockedFocusActor = nullptr;
 
 	float HoldElapsed = 0.f;
 

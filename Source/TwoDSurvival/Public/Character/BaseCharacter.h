@@ -18,6 +18,7 @@ class UItemDefinition;
 class UInputAction;
 class UInputMappingContext;
 class AWeaponBase;
+class ADraggableProp;
 class UHealthHUDWidget;
 class UHotbarWidget;
 class UCraftingComponent;
@@ -243,6 +244,22 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<AWeaponBase> EquippedWeapon;
 
+	// The prop currently being dragged. Null when not dragging.
+	UPROPERTY(BlueprintReadOnly, Category = "Drag")
+	TObjectPtr<ADraggableProp> GrabbedProp;
+
+	/**
+	 * Begin dragging a prop — locks interaction focus to it and reduces walk speed.
+	 * Called from ADraggableProp::OnInteract when the player presses E near the prop.
+	 */
+	void StartDrag(ADraggableProp* Prop);
+
+	/**
+	 * Release the currently dragged prop — restores walk speed and unlocks interaction focus.
+	 * Called from ADraggableProp::OnInteract on second E press, or on death/sleep.
+	 */
+	void ReleaseDrag();
+
 	// Montage played when attacking unarmed (punch). Assign in BP_BaseCharacter.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Unarmed")
 	TObjectPtr<UAnimMontage> UnarmedAttackMontage;
@@ -406,6 +423,16 @@ private:
 
 	FTimerHandle AttackCooldownTimer;
 	FTimerHandle UnarmedHitTimer;
+
+	// True while the player is dragging a prop.
+	bool bIsDragging = false;
+
+	// +1.f = prop is to the right of the player, -1.f = prop is to the left.
+	// Determines the offset direction applied each tick in UpdateDraggedPropPosition.
+	float DragGrabSide = 1.f;
+
+	// Translates GrabbedProp to stay glued to the player's side. Called every Tick while bIsDragging.
+	void UpdateDraggedPropPosition();
 
 	// How many UI panels currently want the mouse cursor shown.
 	// ShowUICursor() increments, HideUICursor() decrements.

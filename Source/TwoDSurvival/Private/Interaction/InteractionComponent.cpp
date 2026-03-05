@@ -3,6 +3,7 @@
 #include "Interaction/InteractionComponent.h"
 #include "Interaction/InteractableInterface.h"
 #include "Character/BaseCharacter.h"
+#include "World/DraggableProp.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -133,6 +134,13 @@ void UInteractionComponent::OnDetectionEndOverlap(UPrimitiveComponent* /*Overlap
 
 void UInteractionComponent::UpdateFocusedInteractable()
 {
+	// While dragging, focus is pinned — don't let other actors steal it.
+	if (bFocusLocked)
+	{
+		FocusedInteractable = LockedFocusActor;
+		return;
+	}
+
 	// Purge any stale entries (e.g. destroyed actors).
 	NearbyInteractables.RemoveAll([](const AActor* A) { return !IsValid(A); });
 
@@ -145,24 +153,48 @@ void UInteractionComponent::UpdateFocusedInteractable()
 	}
 
 	const FVector OwnerLoc = Owner->GetActorLocation();
-	AActor* Best = nullptr;
-	float BestDistSq = MAX_FLT;
+
+	// Priority tier 1: ADraggableProp — always preferred over other interactables.
+	// Priority tier 2: everything else. Within each tier, closest wins.
+	AActor* BestDraggable = nullptr;
+	AActor* BestOther     = nullptr;
+	float   BestDragDistSq  = MAX_FLT;
+	float   BestOtherDistSq = MAX_FLT;
 
 	for (AActor* Candidate : NearbyInteractables)
 	{
 		if (!IsValid(Candidate)) continue;
 		const float DistSq = FVector::DistSquared(OwnerLoc, Candidate->GetActorLocation());
-		if (DistSq < BestDistSq)
+
+		if (Candidate->IsA<ADraggableProp>())
 		{
-			BestDistSq = DistSq;
-			Best = Candidate;
+			if (DistSq < BestDragDistSq) { BestDraggable = Candidate; BestDragDistSq = DistSq; }
+		}
+		else
+		{
+			if (DistSq < BestOtherDistSq) { BestOther = Candidate; BestOtherDistSq = DistSq; }
 		}
 	}
 
-	FocusedInteractable = Best;
+	FocusedInteractable = BestDraggable ? BestDraggable : BestOther;
 	InteractionPrompt = IsValid(FocusedInteractable)
 		? IInteractable::Execute_GetInteractionPrompt(FocusedInteractable)
 		: FText::GetEmpty();
+}
+
+void UInteractionComponent::LockFocus(AActor* Actor)
+{
+	bFocusLocked      = true;
+	LockedFocusActor  = Actor;
+	FocusedInteractable = Actor;
+	InteractionPrompt = FText::FromString(TEXT("Release"));
+}
+
+void UInteractionComponent::UnlockFocus()
+{
+	bFocusLocked     = false;
+	LockedFocusActor = nullptr;
+	UpdateFocusedInteractable();
 }
 
 void UInteractionComponent::CompleteInteraction()

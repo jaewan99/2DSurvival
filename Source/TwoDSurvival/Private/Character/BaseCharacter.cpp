@@ -26,6 +26,8 @@
 #include "UI/StreetHUDWidget.h"
 #include "Crafting/CraftingComponent.h"
 #include "World/TimeManager.h"
+#include "World/DraggableProp.h"
+#include "Components/CapsuleComponent.h"
 // DamageableInterface included via BaseCharacter.h
 
 ABaseCharacter::ABaseCharacter()
@@ -237,6 +239,12 @@ void ABaseCharacter::Tick(float DeltaTime)
 		return;
 	}
 
+	// Translate the grabbed prop to stay glued to the player's side.
+	if (bIsDragging)
+	{
+		UpdateDraggedPropPosition();
+	}
+
 	// Double the drain rate when running (~100 cm/s) or attacking
 	const bool bIsMovingFast = GetVelocity().SizeSquared() > 10000.f;
 	NeedsComponent->SetActiveMovement(bIsMovingFast || bIsAttacking);
@@ -398,6 +406,9 @@ void ABaseCharacter::CloseCrafting_Implementation()
 
 void ABaseCharacter::StartSleeping_Implementation()
 {
+	// Drop any dragged prop before sleeping — can't push things while asleep.
+	ReleaseDrag();
+
 	bMovementLocked = true;
 
 	// Set bIsSleeping BEFORE SetMovementMode — MOVE_None triggers an overlap recalc that
@@ -705,6 +716,66 @@ void ABaseCharacter::LoadGame_Implementation()
 	UE_LOG(LogTemp, Log, TEXT("Game loaded from slot: %s"), *SaveSlotName);
 }
 
+void ABaseCharacter::StartDrag(ADraggableProp* Prop)
+{
+	if (!Prop) return;
+
+	GrabbedProp  = Prop;
+	bIsDragging  = true;
+
+	// Determine which side of the player the prop is on at the moment of grab.
+	// This side stays fixed for the duration of the drag so the prop doesn't flip.
+	DragGrabSide = (Prop->GetActorLocation().X > GetActorLocation().X) ? 1.f : -1.f;
+
+	// Reduce walk speed by the prop's drag multiplier.
+	GetCharacterMovement()->MaxWalkSpeed *= Prop->DragSpeedMultiplier;
+
+	// Lock interaction focus to this prop — prevents bed/door/etc. from stealing E.
+	InteractionComponent->LockFocus(Prop);
+}
+
+void ABaseCharacter::ReleaseDrag()
+{
+	if (!bIsDragging) return;
+
+	bIsDragging = false;
+	GrabbedProp = nullptr;
+
+	// Restore the correct MaxWalkSpeed (health penalty + needs penalty applied).
+	RecalculateMovementSpeed();
+
+	// Resume normal proximity-based focus selection.
+	InteractionComponent->UnlockFocus();
+}
+
+void ABaseCharacter::UpdateDraggedPropPosition()
+{
+	if (!IsValid(GrabbedProp))
+	{
+		// Prop was destroyed externally while being dragged — clean up.
+		ReleaseDrag();
+		return;
+	}
+
+	// Place the prop edge-to-edge with the player capsule, no gap, no overlap.
+	const float CapsuleRadius = GetCapsuleComponent()->GetScaledCapsuleRadius();
+	const float TargetX = GetActorLocation().X + DragGrabSide * (CapsuleRadius + GrabbedProp->PropHalfExtentX);
+
+	FVector NewLoc = GrabbedProp->GetActorLocation();
+	NewLoc.X = TargetX;
+	// Z intentionally unchanged — prop stays at its current floor elevation (no stair pushing).
+
+	FHitResult Hit;
+	const bool bMoved = GrabbedProp->SetActorLocation(NewLoc, /*bSweep=*/true, &Hit);
+
+	if (!bMoved || Hit.bBlockingHit)
+	{
+		// Prop is blocked by a wall — stop the player's lateral movement so it feels
+		// like they are pushing against a solid obstacle.
+		GetCharacterMovement()->Velocity.X = 0.f;
+	}
+}
+
 void ABaseCharacter::SelectHotbarSlot1() { HotbarComponent->SelectSlot(0); }
 void ABaseCharacter::SelectHotbarSlot2() { HotbarComponent->SelectSlot(1); }
 void ABaseCharacter::SelectHotbarSlot3() { HotbarComponent->SelectSlot(2); }
@@ -732,6 +803,9 @@ void ABaseCharacter::HandlePlayerDeath()
 {
 	// Prevent repeated calls (OnDeath could fire more than once in edge cases)
 	if (!HealthComponent || !HealthComponent->IsDead()) return;
+
+	// Drop any dragged prop before dying.
+	ReleaseDrag();
 
 	// Lock all movement input
 	bMovementLocked = true;

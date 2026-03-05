@@ -29,6 +29,39 @@ In `Event Blueprint Update Animation`:
 |---|---|---|
 | `bIsAttacking` | bool | Disable IK rig while any attack montage plays |
 | `bMovementLocked` | bool | Optional: freeze locomotion during hold interactions |
+| `MovementSpeedMultiplier` *(TODO)* | float | Scale blend space play rate when needs are low — **not yet added to C++, deferred to animation pass** |
+
+---
+
+## ⏳ Deferred: Needs Speed Penalty — Animation Hookup
+
+`MaxWalkSpeed` is correctly reduced in C++ (via `RecalculateMovementSpeed`) when Hunger, Thirst, or Fatigue drop below 50. However, whether this is **visually apparent** depends on the AnimBP setup:
+
+### Problem
+If locomotion animations use **root motion**, the animation drives the character's position directly and `MaxWalkSpeed` is just a cap that root motion may never exceed — the character looks like it moves at the same speed.
+
+### Fix (do this during the animation pass)
+
+**Step 1 — Check root motion**
+Open each walk/run animation asset. If `Enable Root Motion` is checked, decide whether to disable it for locomotion (recommended for a 2D game) and use `AddMovementInput` + `MaxWalkSpeed` to drive position instead.
+
+**Step 2 — Add `MovementSpeedMultiplier` to `ABaseCharacter`**
+```cpp
+// In BaseCharacter.h (public, BlueprintReadOnly):
+UPROPERTY(BlueprintReadOnly, Category = "Movement")
+float MovementSpeedMultiplier = 1.f;
+
+// In RecalculateMovementSpeed():
+MovementSpeedMultiplier = NeedsMult * HealthMult;
+GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * MovementSpeedMultiplier;
+```
+
+**Step 3 — Wire in ABP_Player**
+In `Event Blueprint Update Animation`:
+```
+CharacterRef → Get MovementSpeedMultiplier → store as SpeedMult
+```
+Multiply `SpeedMult` into the locomotion blend space sample's **Play Rate** pin, or multiply the speed input into the blend space so the character visually blends to a slower walk/run state.
 
 ---
 
