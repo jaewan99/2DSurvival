@@ -6,8 +6,6 @@
 #include "Engine/DataAsset.h"
 #include "StreetDefinition.generated.h"
 
-class UBuildingDefinition;
-
 UENUM(BlueprintType)
 enum class EExitDirection : uint8
 {
@@ -53,15 +51,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Exits")
 	TObjectPtr<UStreetDefinition> ExitUp;
 
-	// If true, this definition represents a PCG-generated building interior (not a street).
-	// UStreetManager will inject PCG parameters and teleport the player on entry/exit.
+	// If true, this definition represents a building interior (not a street).
+	// UStreetManager uses this to distinguish building entries from street transitions.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building")
 	bool bIsPCGBuilding = false;
-
-	// Building parameters passed into the PCG graph. Only used when bIsPCGBuilding = true.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building",
-		meta = (EditCondition = "bIsPCGBuilding"))
-	TObjectPtr<UBuildingDefinition> BuildingDefinition;
 
 	// Returns the connected street for the given direction. Null = blocked.
 	UStreetDefinition* GetExit(EExitDirection Direction) const;

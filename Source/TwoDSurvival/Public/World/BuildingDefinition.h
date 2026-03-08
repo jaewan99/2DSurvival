@@ -4,22 +4,60 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "World/RoomDefinition.h"
 #include "BuildingDefinition.generated.h"
+
+class URoomDefinition;
 
 UENUM(BlueprintType)
 enum class EBuildingType : uint8
 {
-	House     UMETA(DisplayName = "House"),
-	Hospital  UMETA(DisplayName = "Hospital"),
-	Store     UMETA(DisplayName = "Store"),
+	House       UMETA(DisplayName = "House"),
+	Hospital    UMETA(DisplayName = "Hospital"),
+	Store       UMETA(DisplayName = "Store"),
+	Restaurant  UMETA(DisplayName = "Restaurant"),
 };
+
+// ── Floor layout ──────────────────────────────────────────────────────────────
+
+/**
+ * Defines the category requirement for each room slot on one floor, left to right.
+ *
+ * The generator fills each slot by picking a random URoomDefinition from the
+ * building's RoomPool whose Category matches the slot requirement.
+ *
+ * If SlotCategories has fewer entries than RoomsPerFloor, the last entry repeats.
+ * Use ERoomCategory::Any for a slot with no constraint.
+ *
+ * House example:
+ *   Ground floor: [Social, Social, Utility]   → Kitchen/LivingRoom + Bathroom
+ *   Upper floors: [Private, Private, Utility]  → Bedrooms + Bathroom
+ */
+USTRUCT(BlueprintType)
+struct TWODSURVIVAL_API FFloorLayout
+{
+	GENERATED_BODY()
+
+	// Category requirement per slot, ordered left → right.
+	// Slot index matches room index in the generator grid.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
+	TArray<ERoomCategory> SlotCategories;
+};
+
+// ── Building definition ───────────────────────────────────────────────────────
 
 /**
  * Data asset describing a procedurally generated building interior.
- * Assign to UStreetDefinition::BuildingDefinition on any street definition where bIsPCGBuilding=true.
  *
- * ABuildingGenerator reads this at runtime and spawns room/stair/elevator actors in a grid.
- * Grid layout: rooms along the X axis, floors stacked along the Z axis.
+ * Set up RoomPool with all room archetypes this building can use, then define
+ * FloorLayouts — one entry per floor (index 0 = ground floor). If FloorLayouts
+ * has fewer entries than FloorCount, the last entry repeats for remaining floors.
+ *
+ * Example house setup:
+ *   RoomPool:     [DA_Room_Kitchen, DA_Room_LivingRoom, DA_Room_Bedroom, DA_Room_Bathroom]
+ *   FloorLayouts:
+ *     [0] SlotCategories: [Social, Social, Utility]    ← ground floor
+ *     [1] SlotCategories: [Private, Private, Utility]  ← upper floors (repeats)
  */
 UCLASS(BlueprintType)
 class TWODSURVIVAL_API UBuildingDefinition : public UDataAsset
@@ -30,15 +68,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building")
 	EBuildingType BuildingType = EBuildingType::House;
 
-	// Number of floors in this building.
+	// ── Layout ────────────────────────────────────────────────────────────────
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
 	int32 FloorCount = 3;
 
-	// Number of rooms per floor (excluding stairwell/elevator).
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
 	int32 RoomsPerFloor = 4;
 
-	// Width of one room cell (cm). Also the X spacing between room origins.
+	// Width of one room cell (cm).
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
 	float RoomWidth = 800.f;
 
@@ -46,30 +84,61 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
 	float FloorHeight = 400.f;
 
-	// Local X offset (from ABuildingGenerator origin) of the staircase column.
-	// Must be a multiple of RoomWidth. e.g. RoomWidth * (RoomsPerFloor - 1).
+	// ── Stairs ────────────────────────────────────────────────────────────────
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
+	bool bRandomizeStairs = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout",
+		meta = (EditCondition = "bRandomizeStairs", ClampMin = "1"))
+	int32 MinStairsPerFloor = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout",
+		meta = (EditCondition = "bRandomizeStairs", ClampMin = "1"))
+	int32 MaxStairsPerFloor = 2;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout",
+		meta = (EditCondition = "bRandomizeStairs"))
+	int32 RandomSeed = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout",
+		meta = (EditCondition = "!bRandomizeStairs"))
 	float StairX = 3200.f;
 
-	// Whether this building has an elevator shaft.
+	// ── Elevator ──────────────────────────────────────────────────────────────
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Elevator")
 	bool bHasElevator = false;
 
-	// Fixed local X position for the elevator room on every floor.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Elevator",
 		meta = (EditCondition = "bHasElevator"))
 	float ElevatorX = 200.f;
 
-	// Blueprint actor class spawned for each room cell.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actors")
-	TSubclassOf<AActor> RoomActorClass;
+	// ── Room pool & floor layouts ─────────────────────────────────────────────
 
-	// Blueprint actor class spawned at the staircase column on each floor.
+	/**
+	 * All room archetypes this building can use.
+	 * The generator filters this list by each slot's ERoomCategory requirement.
+	 * Add every DA_Room_* asset relevant to this building type here.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rooms")
+	TArray<TObjectPtr<URoomDefinition>> RoomPool;
+
+	/**
+	 * Category sequence per floor (index 0 = ground floor).
+	 * If FloorLayouts.Num() < FloorCount, the last entry repeats for remaining floors.
+	 * Each FFloorLayout defines one category per room slot, left to right.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rooms")
+	TArray<FFloorLayout> FloorLayouts;
+
+	// ── Actors ────────────────────────────────────────────────────────────────
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actors")
 	TSubclassOf<AActor> StairsActorClass;
 
-	// Blueprint actor class for the elevator room on each floor. Empty room for now.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actors",
 		meta = (EditCondition = "bHasElevator"))
 	TSubclassOf<AActor> ElevatorRoomActorClass;
+	// Doors are placed inside each room Blueprint as Child Actor Components.
 };

@@ -5,9 +5,7 @@
 #include "Engine/Level.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "World/BuildingDefinition.h"
 #include "World/BuildingEntrance.h"
-#include "World/BuildingGenerator.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public
@@ -233,22 +231,6 @@ FVector UStreetManager::ComputeAdjacentOffset(EExitDirection Direction, UStreetD
 // ─────────────────────────────────────────────────────────────────────────────
 // Private — building helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-void UStreetManager::TriggerBuildingGeneration(ULevel* Level)
-{
-	if (!Level) return;
-
-	for (AActor* Actor : Level->Actors)
-	{
-		if (ABuildingGenerator* Generator = Cast<ABuildingGenerator>(Actor))
-		{
-			Generator->Generate();
-			return;
-		}
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("[StreetManager] TriggerBuildingGeneration: no ABuildingGenerator found in building level."));
-}
 
 void UStreetManager::TeleportPlayerToBuildingEntrance(ULevel* Level)
 {

@@ -56,6 +56,16 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBoxComponent> InteractionBox;
 
+	// Where the player lands after arriving on the LOWER floor (going downstairs).
+	// Drag this to the foot of the stairs / bottom of the ladder in the Blueprint viewport.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<USceneComponent> LowerExitPoint;
+
+	// Where the player lands after arriving on the UPPER floor (going upstairs).
+	// Drag this to the top of the stairs / top of the ladder in the Blueprint viewport.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<USceneComponent> UpperExitPoint;
+
 	// Determines the interaction prompt text ("Go Upstairs/Downstairs" vs "Climb Up/Down").
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Transport")
 	ETransportType TransportType = ETransportType::Stairs;

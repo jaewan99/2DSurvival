@@ -30,6 +30,15 @@ AVerticalTransport::AVerticalTransport()
 	InteractionBox->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
 	InteractionBox->SetGenerateOverlapEvents(true);
 
+	// Exit markers — drag these to the landing positions in the Blueprint viewport.
+	LowerExitPoint = CreateDefaultSubobject<USceneComponent>(TEXT("LowerExitPoint"));
+	LowerExitPoint->SetupAttachment(RootScene);
+	LowerExitPoint->SetRelativeLocation(FVector(0.f, 0.f, 0.f)); // foot of stairs by default
+
+	UpperExitPoint = CreateDefaultSubobject<USceneComponent>(TEXT("UpperExitPoint"));
+	UpperExitPoint->SetupAttachment(RootScene);
+	UpperExitPoint->SetRelativeLocation(FVector(0.f, 0.f, 400.f)); // top of stairs by default
+
 	// Default sizes for FloorHeight=400. ResizeBoxes() updates both at BeginPlay.
 	ResizeBoxes();
 }
@@ -70,19 +79,10 @@ void AVerticalTransport::OnInteract_Implementation(ABaseCharacter* Interactor)
 {
 	if (!Interactor) return;
 
-	FVector Destination;
-
-	if (IsPlayerOnLowerFloor(Interactor))
-	{
-		// Player is on the lower floor → teleport to the upper floor.
-		// Land slightly in front of the stair/ladder (negative X = left in the room).
-		Destination = GetActorLocation() + FVector(-80.f, 0.f, FloorHeight);
-	}
-	else
-	{
-		// Player is on the upper floor → teleport to the lower floor.
-		Destination = GetActorLocation() + FVector(-80.f, 0.f, 0.f);
-	}
+	// Use the designer-placed exit markers for exact landing positions.
+	const FVector Destination = IsPlayerOnLowerFloor(Interactor)
+		? UpperExitPoint->GetComponentLocation()
+		: LowerExitPoint->GetComponentLocation();
 
 	Interactor->SetActorLocation(Destination, false, nullptr, ETeleportType::TeleportPhysics);
 }

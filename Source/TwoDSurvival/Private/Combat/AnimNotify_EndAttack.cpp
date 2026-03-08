@@ -3,6 +3,7 @@
 #include "Combat/AnimNotify_EndAttack.h"
 #include "Character/BaseCharacter.h"
 #include "Weapon/WeaponBase.h"
+#include "Enemy/EnemyBase.h"
 
 void UAnimNotify_EndAttack::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation,
 	const FAnimNotifyEventReference& EventReference)
@@ -11,12 +12,20 @@ void UAnimNotify_EndAttack::Notify(USkeletalMeshComponent* MeshComp, UAnimSequen
 
 	if (!MeshComp) return;
 
-	ABaseCharacter* Character = Cast<ABaseCharacter>(MeshComp->GetOwner());
-	if (!Character) return;
+	// Player weapon path
+	if (ABaseCharacter* Character = Cast<ABaseCharacter>(MeshComp->GetOwner()))
+	{
+		AWeaponBase* Weapon = Character->EquippedWeapon;
+		if (!Weapon) return;
 
-	AWeaponBase* Weapon = Character->EquippedWeapon;
-	if (!Weapon) return;
+		// Close the hitbox immediately and cancel the auto-close timer
+		Weapon->EndAttack();
+		return;
+	}
 
-	// Close the hitbox immediately and cancel the auto-close timer
-	Weapon->EndAttack();
+	// Enemy path — close hitbox at the correct animation frame
+	if (AEnemyBase* Enemy = Cast<AEnemyBase>(MeshComp->GetOwner()))
+	{
+		Enemy->DisableMeleeHitbox();
+	}
 }

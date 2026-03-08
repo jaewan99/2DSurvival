@@ -122,6 +122,12 @@ public:
 
 	virtual void TakeMeleeDamage_Implementation(float Amount, AActor* DamageSource) override;
 
+	// Called by AnimNotify_BeginAttack — enables the melee hitbox at the correct animation frame.
+	void EnableMeleeHitbox();
+
+	// Called by AnimNotify_EndAttack — disables the melee hitbox early for frame-accurate close.
+	void DisableMeleeHitbox();
+
 	// --- AnimBP-readable state ---
 
 	// Current AI state — read in ABP_Enemy to drive locomotion.

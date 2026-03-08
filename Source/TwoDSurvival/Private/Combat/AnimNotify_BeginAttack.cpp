@@ -4,6 +4,7 @@
 #include "Character/BaseCharacter.h"
 #include "Character/HealthComponent.h"
 #include "Weapon/WeaponBase.h"
+#include "Enemy/EnemyBase.h"
 
 void UAnimNotify_BeginAttack::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation,
 	const FAnimNotifyEventReference& EventReference)
@@ -12,16 +13,23 @@ void UAnimNotify_BeginAttack::Notify(USkeletalMeshComponent* MeshComp, UAnimSequ
 
 	if (!MeshComp) return;
 
-	ABaseCharacter* Character = Cast<ABaseCharacter>(MeshComp->GetOwner());
-	if (!Character) return;
+	// Player weapon path
+	if (ABaseCharacter* Character = Cast<ABaseCharacter>(MeshComp->GetOwner()))
+	{
+		AWeaponBase* Weapon = Character->EquippedWeapon;
+		if (!Weapon) return;
 
-	// Only relevant when the player has a weapon equipped
-	AWeaponBase* Weapon = Character->EquippedWeapon;
-	if (!Weapon) return;
+		const float DamageMultiplier = Character->HealthComponent
+			? Character->HealthComponent->GetDamageMultiplier()
+			: 1.f;
 
-	const float DamageMultiplier = Character->HealthComponent
-		? Character->HealthComponent->GetDamageMultiplier()
-		: 1.f;
+		Weapon->BeginAttack(DamageMultiplier);
+		return;
+	}
 
-	Weapon->BeginAttack(DamageMultiplier);
+	// Enemy path — enable hitbox at the correct animation frame
+	if (AEnemyBase* Enemy = Cast<AEnemyBase>(MeshComp->GetOwner()))
+	{
+		Enemy->EnableMeleeHitbox();
+	}
 }

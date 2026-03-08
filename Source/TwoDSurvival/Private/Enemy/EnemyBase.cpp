@@ -261,15 +261,13 @@ void AEnemyBase::BeginMeleeAttack()
 	bRotationLocked = true;
 	HitActorsThisSwing.Empty();
 
-	MeleeHitbox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	// Hitbox is NOT enabled here — AnimNotify_BeginAttack fires at the correct hit frame.
+	// SwingTimerHandle acts as a safety fallback to close the hitbox if the notify is missed.
 
 	if (AttackMontage && GetMesh() && GetMesh()->GetAnimInstance())
 	{
 		GetMesh()->GetAnimInstance()->Montage_Play(AttackMontage);
 	}
-
-	// Disable hitbox after the swing window
-	GetWorldTimerManager().SetTimer(SwingTimerHandle, this, &AEnemyBase::EndMeleeAttack, SwingWindowDuration, false);
 
 	// Unlock attack input after cooldown
 	GetWorldTimerManager().SetTimer(AttackCooldownTimer, this, &AEnemyBase::ResetAttackCooldown, AttackCooldown, false);
@@ -281,10 +279,25 @@ void AEnemyBase::BeginMeleeAttack()
 	GetWorldTimerManager().SetTimer(RotationLockTimer, this, &AEnemyBase::OnRotationLockExpired, AttackRotationLockDuration, false);
 }
 
-void AEnemyBase::EndMeleeAttack()
+void AEnemyBase::EnableMeleeHitbox()
+{
+	if (CurrentState == EEnemyState::Dead) return;
+	HitActorsThisSwing.Empty();
+	MeleeHitbox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+	// Safety fallback: auto-close after SwingWindowDuration if EndAttack notify is absent
+	GetWorldTimerManager().SetTimer(SwingTimerHandle, this, &AEnemyBase::DisableMeleeHitbox, SwingWindowDuration, false);
+}
+
+void AEnemyBase::DisableMeleeHitbox()
 {
 	MeleeHitbox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GetWorldTimerManager().ClearTimer(SwingTimerHandle);
+}
+
+void AEnemyBase::EndMeleeAttack()
+{
+	DisableMeleeHitbox();
 }
 
 void AEnemyBase::ResetAttackCooldown()

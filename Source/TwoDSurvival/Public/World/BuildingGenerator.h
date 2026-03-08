@@ -4,9 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "World/BuildingDefinition.h"
 #include "BuildingGenerator.generated.h"
 
-class UBuildingDefinition;
+class URoomDefinition;
 
 /**
  * Place one of these in every building sublevel.
@@ -43,6 +44,6 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<AActor>> SpawnedActors;
 
-	// Returns the spawned actor so the caller can configure it (e.g. set FloorHeight).
+	// Spawns one actor at WorldPosition, registers it for cleanup on re-Generate.
 	AActor* SpawnRoomAt(TSubclassOf<AActor> ActorClass, FVector WorldPosition);
 };

@@ -94,9 +94,6 @@ private:
 	// Computes where to place an adjacent Left/Right street in world space.
 	FVector ComputeAdjacentOffset(EExitDirection Direction, UStreetDefinition* AdjacentStreet) const;
 
-	// Finds the ABuildingGenerator in the loaded level and calls Generate() on it.
-	void TriggerBuildingGeneration(ULevel* Level);
-
 	// Teleports the player pawn to the first ABuildingEntrance found in Level.
 	void TeleportPlayerToBuildingEntrance(ULevel* Level);
 
