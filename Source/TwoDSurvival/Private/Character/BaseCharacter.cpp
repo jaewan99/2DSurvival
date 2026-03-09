@@ -27,8 +27,10 @@
 #include "UI/DialogueWidget.h"
 #include "World/NPCActor.h"
 #include "World/NPCDefinition.h"
+#include "World/FlashlightActor.h"
 #include "Crafting/CraftingComponent.h"
 #include "World/TimeManager.h"
+#include "World/WeatherManager.h"
 #include "World/DraggableProp.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/PostProcessComponent.h"
@@ -546,6 +548,12 @@ void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent
 		if (Slot.ItemDef->MoodRestore > 0.f) NeedsComponent->ModifyMood(Slot.ItemDef->MoodRestore);
 	}
 
+	// Battery refill for flashlight
+	if (Slot.ItemDef->BatteryRestoreAmount > 0.f && EquippedFlashlight)
+	{
+		EquippedFlashlight->RefillBattery(Slot.ItemDef->BatteryRestoreAmount);
+	}
+
 	FromInventory->RemoveItem(SlotIndex, 1);
 
 	const FBodyPartHealth BodyPart = HealthComponent->GetBodyPart(EBodyPart::Body);
@@ -559,27 +567,56 @@ void ABaseCharacter::EquipItem_Implementation(int32 SlotIndex, UInventoryCompone
 
 	FInventorySlot Slot = FromInventory->GetSlot(SlotIndex);
 	if (Slot.IsEmpty() || !Slot.ItemDef) return;
-	if (Slot.ItemDef->ItemCategory != EItemCategory::Weapon) return;
-	if (!Slot.ItemDef->WeaponActorClass) return;
+
+	UItemDefinition* Def = Slot.ItemDef;
+
+	// Flashlight
+	if (Def->bIsFlashlight && Def->FlashlightClass)
+	{
+		// Unequip existing flashlight first if it's a different item
+		if (EquippedFlashlight && EquippedFlashlight->SourceItemDef != Def)
+		{
+			UnequipFlashlight();
+		}
+		// Only spawn if not already equipped
+		if (!EquippedFlashlight)
+		{
+			FActorSpawnParameters Params;
+			Params.Owner = this;
+			AFlashlightActor* FL = GetWorld()->SpawnActor<AFlashlightActor>(Def->FlashlightClass, FTransform::Identity, Params);
+			if (FL)
+			{
+				FL->SourceItemDef = Def;
+				FL->AttachToComponent(GetMesh(),
+					FAttachmentTransformRules::SnapToTargetIncludingScale,
+					FlashlightSocketName);
+				EquippedFlashlight = FL;
+			}
+		}
+		return;
+	}
+
+	if (Def->ItemCategory != EItemCategory::Weapon) return;
+	if (!Def->WeaponActorClass) return;
 
 	// Unequip any currently equipped weapon first
 	UnequipWeapon();
 
 	// Spawn the weapon actor and attach it to the character's hand socket
-	FActorSpawnParameters Params;
-	Params.Owner = this;
+	FActorSpawnParameters WeaponParams;
+	WeaponParams.Owner = this;
 	AWeaponBase* Weapon = GetWorld()->SpawnActor<AWeaponBase>(
-		Slot.ItemDef->WeaponActorClass, FTransform::Identity, Params);
+		Def->WeaponActorClass, FTransform::Identity, WeaponParams);
 
 	if (Weapon)
 	{
-		Weapon->SourceItemDef = Slot.ItemDef;
+		Weapon->SourceItemDef = Def;
 		Weapon->AttachToComponent(GetMesh(),
 			FAttachmentTransformRules::SnapToTargetIncludingScale,
 			WeaponSocketName);
 		EquippedWeapon = Weapon;
 
-		UE_LOG(LogTemp, Log, TEXT("Equipped: %s"), *Slot.ItemDef->DisplayName.ToString());
+		UE_LOG(LogTemp, Log, TEXT("Equipped: %s"), *Def->DisplayName.ToString());
 	}
 }
 
@@ -589,6 +626,15 @@ void ABaseCharacter::UnequipWeapon_Implementation()
 	{
 		EquippedWeapon->Destroy();
 		EquippedWeapon = nullptr;
+	}
+}
+
+void ABaseCharacter::UnequipFlashlight_Implementation()
+{
+	if (EquippedFlashlight)
+	{
+		EquippedFlashlight->Destroy();
+		EquippedFlashlight = nullptr;
 	}
 }
 
@@ -695,6 +741,32 @@ void ABaseCharacter::SaveGame_Implementation()
 		if (NPC && NPC->bTradeCompleted && NPC->NPCDef && !NPC->NPCDef->NPCID.IsNone())
 		{
 			SaveObj->CompletedNPCTrades.Add(NPC->NPCDef->NPCID);
+		}
+	}
+
+	// Calendar
+	{
+		TArray<AActor*> TimeManagers;
+		UGameplayStatics::GetAllActorsOfClass(GetWorld(), ATimeManager::StaticClass(), TimeManagers);
+		if (TimeManagers.Num() > 0)
+		{
+			ATimeManager* TM = Cast<ATimeManager>(TimeManagers[0]);
+			SaveObj->SavedDay       = TM->CurrentDay;
+			SaveObj->SavedMonth     = TM->CurrentMonth;
+			SaveObj->SavedYear      = TM->CurrentYear;
+			SaveObj->SavedTimeOfDay = TM->TimeOfDay;
+		}
+	}
+
+	// Weather
+	{
+		TArray<AActor*> WeatherManagers;
+		UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWeatherManager::StaticClass(), WeatherManagers);
+		if (WeatherManagers.Num() > 0)
+		{
+			AWeatherManager* WM = Cast<AWeatherManager>(WeatherManagers[0]);
+			SaveObj->SavedWeatherState   = WM->CurrentWeather;
+			SaveObj->SavedWeatherElapsed = WM->GetStateElapsedTime();
 		}
 	}
 
@@ -813,6 +885,29 @@ void ABaseCharacter::LoadGame_Implementation()
 		if (NPC && NPC->NPCDef && !NPC->NPCDef->NPCID.IsNone())
 		{
 			NPC->bTradeCompleted = SaveObj->CompletedNPCTrades.Contains(NPC->NPCDef->NPCID);
+		}
+	}
+
+	// Restore calendar
+	{
+		TArray<AActor*> TimeManagers;
+		UGameplayStatics::GetAllActorsOfClass(GetWorld(), ATimeManager::StaticClass(), TimeManagers);
+		if (TimeManagers.Num() > 0)
+		{
+			ATimeManager* TM = Cast<ATimeManager>(TimeManagers[0]);
+			TM->SetCalendar(SaveObj->SavedDay, SaveObj->SavedMonth, SaveObj->SavedYear);
+			TM->TimeOfDay = FMath::Clamp(SaveObj->SavedTimeOfDay, 0.f, 1.f);
+		}
+	}
+
+	// Restore weather
+	{
+		TArray<AActor*> WeatherManagers;
+		UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWeatherManager::StaticClass(), WeatherManagers);
+		if (WeatherManagers.Num() > 0)
+		{
+			AWeatherManager* WM = Cast<AWeatherManager>(WeatherManagers[0]);
+			WM->RestoreWeather(SaveObj->SavedWeatherState, SaveObj->SavedWeatherElapsed);
 		}
 	}
 

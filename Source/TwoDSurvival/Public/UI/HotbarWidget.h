@@ -7,15 +7,18 @@
 #include "HotbarWidget.generated.h"
 
 class UHorizontalBox;
-class UBorder;
-class UImage;
 class UHotbarComponent;
-class UTextBlock;
+class UHotbarSlotWidget;
 
 /**
- * Hotbar widget that displays quick-select item slots at the bottom of the screen.
- * Creates slot visuals dynamically in NativeConstruct — no per-slot BindWidget needed.
- * Create a Blueprint child (WBP_HotbarWidget) with a HorizontalBox named "SlotContainer".
+ * Always-visible hotbar widget shown at the bottom of the screen.
+ *
+ * Blueprint child setup (WBP_HotbarWidget):
+ *   1. Add a HorizontalBox named "SlotContainer" — slots are added here dynamically.
+ *   2. Set SlotWidgetClass = WBP_HotbarSlot in the class defaults.
+ *
+ * The widget rebuilds its slot visuals automatically whenever the hotbar size changes
+ * (e.g. when the player picks up or drops a belt or bag).
  */
 UCLASS()
 class TWODSURVIVAL_API UHotbarWidget : public UUserWidget
@@ -26,7 +29,18 @@ public:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UHorizontalBox* SlotContainer;
 
-	/** Refresh all slot icons and active highlight from the HotbarComponent. */
+	/**
+	 * The widget class used to create each slot visual.
+	 * Assign WBP_HotbarSlot (your Blueprint child of UHotbarSlotWidget) here.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hotbar")
+	TSubclassOf<UHotbarSlotWidget> SlotWidgetClass;
+
+	/** Rebuild slot widgets from scratch (called when slot count changes). */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void RebuildSlots();
+
+	/** Refresh slot data without rebuilding (called when contents change). */
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void RefreshSlots();
 
@@ -41,11 +55,7 @@ private:
 	UHotbarComponent* CachedHotbarComp;
 
 	UPROPERTY()
-	TArray<UBorder*> SlotBorders;
+	TArray<UHotbarSlotWidget*> SlotWidgets;
 
-	UPROPERTY()
-	TArray<UImage*> SlotIcons;
-
-	UPROPERTY()
-	TArray<UTextBlock*> SlotKeyLabels;
+	int32 LastKnownSlotCount = -1;
 };

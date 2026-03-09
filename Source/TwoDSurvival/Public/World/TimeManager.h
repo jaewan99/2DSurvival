@@ -13,6 +13,17 @@ class UPostProcessComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDayPhaseChanged, bool, bIsNight);
 
+UENUM(BlueprintType)
+enum class ESeason : uint8
+{
+	Spring UMETA(DisplayName = "Spring"),
+	Summer UMETA(DisplayName = "Summer"),
+	Fall   UMETA(DisplayName = "Fall"),
+	Winter UMETA(DisplayName = "Winter"),
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnDayChanged, int32, Day, int32, Month, int32, Year, ESeason, Season);
+
 /**
  * World-level day/night cycle manager.
  * All visuals are computed from C++ math — no curve assets needed.
@@ -89,6 +100,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lighting|PostProcess")
 	FLinearColor NightTint = FLinearColor(0.4f, 0.5f, 0.9f, 1.f);
 
+	// --- Calendar ---
+
+	/** Number of in-game days per month. 3 months per season, 4 seasons = 12 months per year. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Calendar")
+	int32 DaysPerMonth = 30;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Calendar")
+	int32 CurrentDay = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Calendar")
+	int32 CurrentMonth = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Calendar")
+	int32 CurrentYear = 1;
+
 	// --- Runtime state ---
 
 	UPROPERTY(BlueprintReadOnly, Category = "Time")
@@ -106,6 +132,34 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Time")
 	void SetDaylight(float NewSunriseTime, float NewSunsetTime);
 
+	UFUNCTION(BlueprintCallable, Category = "Calendar")
+	ESeason GetCurrentSeason() const;
+
+	/** Day 1 of month 1 = day 1; rolls over each year. */
+	UFUNCTION(BlueprintCallable, Category = "Calendar")
+	int32 GetDayOfYear() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Calendar")
+	FText GetDateText() const;
+
+	/** Restore calendar from a save game. */
+	UFUNCTION(BlueprintCallable, Category = "Calendar")
+	void SetCalendar(int32 Day, int32 Month, int32 Year);
+
+	/**
+	 * Weather fog offset added on top of the day/night lerped density.
+	 * Set each weather-state change by AWeatherManager.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Weather")
+	void SetWeatherFogOffset(float Offset);
+
+	/**
+	 * Weather tint multiplied with the final scene color tint from the day/night lerp.
+	 * White = no change. Set each weather-state change by AWeatherManager.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Weather")
+	void SetWeatherTint(FLinearColor Tint);
+
 	/**
 	 * Multiplier applied to time progression each tick.
 	 * 1.0 = normal speed. 20.0 = time passes 20x faster (used during sleep).
@@ -121,6 +175,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Time")
 	FOnDayPhaseChanged OnDayPhaseChanged;
 
+	/** Fired once per in-game day, after midnight wrap. */
+	UPROPERTY(BlueprintAssignable, Category = "Calendar")
+	FOnDayChanged OnDayChanged;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
@@ -132,6 +190,12 @@ private:
 	UPROPERTY() TObjectPtr<UPostProcessComponent>          CachedPostProcess;
 
 	bool bWasNight = false;
+
+	// Added by AWeatherManager on each weather state change.
+	float WeatherFogOffset = 0.f;
+	FLinearColor WeatherTintMultiplier = FLinearColor::White;
+
+	void AdvanceDay();
 
 	// 0 = fully night, 1 = solar noon. Uses sin arc between sunrise and sunset.
 	float GetSolarElevation() const;

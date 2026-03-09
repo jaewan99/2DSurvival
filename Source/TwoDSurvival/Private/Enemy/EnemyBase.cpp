@@ -2,6 +2,7 @@
 
 #include "Enemy/EnemyBase.h"
 #include "Character/BaseCharacter.h"
+#include "World/FlashlightActor.h"
 #include "Character/HealthComponent.h"
 #include "Character/HealthTypes.h"
 #include "UI/EnemyHealthBarWidget.h"
@@ -99,8 +100,16 @@ ABaseCharacter* AEnemyBase::DetectPlayer() const
 	ABaseCharacter* Player = Cast<ABaseCharacter>(PC->GetPawn());
 	if (!Player) return nullptr;
 
-	float Dist = FVector::Dist(GetActorLocation(), Player->GetActorLocation());
-	return Dist <= AggroRange ? Player : nullptr;
+	const float Dist = FVector::Dist(GetActorLocation(), Player->GetActorLocation());
+
+	// Flashlight in cone doubles aggro range — enemies spot the light source.
+	float EffectiveRange = AggroRange;
+	if (Player->EquippedFlashlight && Player->EquippedFlashlight->IsInCone(GetActorLocation()))
+	{
+		EffectiveRange *= 2.f;
+	}
+
+	return Dist <= EffectiveRange ? Player : nullptr;
 }
 
 // --- Per-State Tick ---

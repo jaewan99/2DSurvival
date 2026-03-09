@@ -127,6 +127,20 @@ public:
 	/** Called from BaseCharacter Tick — doubles drain when the character is moving fast or attacking. */
 	void SetActiveMovement(bool bActive);
 
+	/**
+	 * True while the player is inside a building (set by ABuildingEntrance on enter/exit).
+	 * When indoors, weather-driven thirst boosts and mood drains do NOT apply.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Needs")
+	bool bIsIndoors = false;
+
+	/**
+	 * Called by AWeatherManager on each weather state change.
+	 * ThirstBoost:  thirst restored per second while outdoors (positive = less thirsty).
+	 * MoodDrain:    extra mood lost per second while outdoors in bad weather.
+	 */
+	void SetWeatherModifiers(float ThirstBoost, float MoodDrain);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -138,6 +152,10 @@ private:
 	float Mood    = 100.f;
 
 	bool bIsActiveMovement = false;
+
+	// Set by AWeatherManager on each state change. Zero when weather is benign.
+	float WeatherThirstBoostRate = 0.f;
+	float WeatherMoodDrainRate   = 0.f;
 
 	UPROPERTY()
 	ABaseCharacter* OwnerChar = nullptr;

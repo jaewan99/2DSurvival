@@ -40,7 +40,11 @@ void ATimeManager::Tick(float DeltaTime)
 	if (DayDurationSeconds <= 0.f) return;
 
 	TimeOfDay += DeltaTime * TimeScale / DayDurationSeconds;
-	if (TimeOfDay >= 1.f) TimeOfDay -= 1.f;
+	if (TimeOfDay >= 1.f)
+	{
+		TimeOfDay -= 1.f;
+		AdvanceDay();
+	}
 
 	const bool bIsNightNow = IsNight();
 	if (bIsNightNow != bWasNight)
@@ -76,6 +80,61 @@ float ATimeManager::GetHour() const
 void ATimeManager::SetTimeScale(float NewScale)
 {
 	TimeScale = FMath::Max(0.f, NewScale);
+}
+
+void ATimeManager::AdvanceDay()
+{
+	CurrentDay++;
+	if (CurrentDay > DaysPerMonth)
+	{
+		CurrentDay = 1;
+		CurrentMonth++;
+		if (CurrentMonth > 12)
+		{
+			CurrentMonth = 1;
+			CurrentYear++;
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("[TimeManager] New day — Day %d, Month %d, Year %d (%s)"),
+		CurrentDay, CurrentMonth, CurrentYear, *GetDateText().ToString());
+	OnDayChanged.Broadcast(CurrentDay, CurrentMonth, CurrentYear, GetCurrentSeason());
+}
+
+ESeason ATimeManager::GetCurrentSeason() const
+{
+	if (CurrentMonth <= 3)  return ESeason::Spring;
+	if (CurrentMonth <= 6)  return ESeason::Summer;
+	if (CurrentMonth <= 9)  return ESeason::Fall;
+	return ESeason::Winter;
+}
+
+int32 ATimeManager::GetDayOfYear() const
+{
+	return (CurrentMonth - 1) * DaysPerMonth + CurrentDay;
+}
+
+FText ATimeManager::GetDateText() const
+{
+	static const TCHAR* SeasonNames[] = { TEXT("Spring"), TEXT("Summer"), TEXT("Fall"), TEXT("Winter") };
+	return FText::FromString(FString::Printf(TEXT("Day %d, Month %d (%s), Year %d"),
+		CurrentDay, CurrentMonth, SeasonNames[(int32)GetCurrentSeason()], CurrentYear));
+}
+
+void ATimeManager::SetCalendar(int32 Day, int32 Month, int32 Year)
+{
+	CurrentDay   = FMath::Max(1, Day);
+	CurrentMonth = FMath::Clamp(Month, 1, 12);
+	CurrentYear  = FMath::Max(1, Year);
+}
+
+void ATimeManager::SetWeatherFogOffset(float Offset)
+{
+	WeatherFogOffset = Offset;
+}
+
+void ATimeManager::SetWeatherTint(FLinearColor Tint)
+{
+	WeatherTintMultiplier = Tint;
 }
 
 void ATimeManager::SetDaylight(float NewSunriseTime, float NewSunsetTime)
@@ -131,12 +190,13 @@ void ATimeManager::ApplyVisuals()
 
 	if (CachedHeightFog)
 	{
-		CachedHeightFog->SetFogDensity(FMath::Lerp(NightFogDensity, DayFogDensity, Solar));
+		CachedHeightFog->SetFogDensity(FMath::Lerp(NightFogDensity, DayFogDensity, Solar) + WeatherFogOffset);
 	}
 
 	if (CachedPostProcess)
 	{
-		CachedPostProcess->Settings.SceneColorTint = FLinearColor::LerpUsingHSV(NightTint, DayTint, Solar);
+		const FLinearColor BaseTint = FLinearColor::LerpUsingHSV(NightTint, DayTint, Solar);
+		CachedPostProcess->Settings.SceneColorTint = BaseTint * WeatherTintMultiplier;
 		CachedPostProcess->Settings.bOverride_SceneColorTint = true;
 	}
 }

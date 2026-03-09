@@ -25,9 +25,9 @@ class TWODSURVIVAL_API UHotbarComponent : public UActorComponent
 public:
 	UHotbarComponent();
 
-	// Number of hotbar slots available. Configure in defaults.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hotbar", meta = (ClampMin = 1))
-	int32 HotbarSlotCount = 6;
+	// Base hotbar slots always available, even without equipment.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hotbar", meta = (ClampMin = 0))
+	int32 HotbarSlotCount = 0;
 
 	// Currently active (selected) hotbar slot index.
 	UPROPERTY(BlueprintReadOnly, Category = "Hotbar")
@@ -52,6 +52,14 @@ public:
 	// Cycle the active slot by Direction (+1 or -1), wrapping around.
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	void CycleSlot(int32 Direction);
+
+	/** Add Count empty slots to the hotbar (called when player picks up a belt/bag). */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	void ExpandHotbar(int32 Count);
+
+	/** Remove Count slots from the end of the hotbar (called when player loses a belt/bag). */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	void ShrinkHotbar(int32 Count);
 
 	// Get the item definition in the given hotbar slot.
 	UFUNCTION(BlueprintPure, Category = "Hotbar")

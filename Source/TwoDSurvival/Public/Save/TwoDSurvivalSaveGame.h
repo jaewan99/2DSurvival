@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
 #include "Character/HealthTypes.h"
+#include "World/WeatherManager.h"   // EWeatherState
 #include "TwoDSurvivalSaveGame.generated.h"
 
 /** Serialized representation of one inventory slot. */
@@ -98,4 +99,26 @@ public:
 	// NPCIDs for which the player has completed the trade offer.
 	UPROPERTY()
 	TSet<FName> CompletedNPCTrades;
+
+	// --- Calendar ---
+	UPROPERTY()
+	int32 SavedDay = 1;
+
+	UPROPERTY()
+	int32 SavedMonth = 1;
+
+	UPROPERTY()
+	int32 SavedYear = 1;
+
+	/** Normalized time of day (0–1) at the moment of save. */
+	UPROPERTY()
+	float SavedTimeOfDay = 0.25f;
+
+	// --- Weather ---
+	UPROPERTY()
+	EWeatherState SavedWeatherState = EWeatherState::Clear;
+
+	/** Elapsed seconds in the current weather state at the moment of save. */
+	UPROPERTY()
+	float SavedWeatherElapsed = 0.f;
 };

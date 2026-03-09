@@ -8,6 +8,8 @@
 #include "Weapon/WeaponBase.h"
 #include "ItemDefinition.generated.h"
 
+class AFlashlightActor;
+
 /**
  * Data asset that defines a single item type.
  * Create one asset per item in the editor (right-click Content Browser → Miscellaneous → Data Asset → UItemDefinition).
@@ -56,6 +58,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable", meta = (EditCondition = "ItemCategory == EItemCategory::Consumable"))
 	float MoodRestore = 0.f;
 
+	/** Battery charge restored when consumed (only relevant for battery-type items). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable",
+		meta = (EditCondition = "ItemCategory == EItemCategory::Consumable"))
+	float BatteryRestoreAmount = 0.f;
+
 	// If true, this item can be placed in the hotbar.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	bool bCanBeEquipped = false;
@@ -63,6 +70,22 @@ public:
 	// Number of extra inventory slots this item provides when in inventory (e.g. backpack).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Equipment", meta = (ClampMin = 0))
 	int32 BonusSlots = 0;
+
+	/** Number of hotbar quick-select slots this item grants when carried in inventory.
+	 *  E.g. Belt = 1, Jacket = 1, Satchel = 2, Backpack = 2. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Equipment", meta = (ClampMin = 0))
+	int32 HotbarBonus = 0;
+
+	// --- Flashlight ---
+
+	/** If true, equipping this item spawns a AFlashlightActor attached to FlashlightSocket. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Equipment")
+	bool bIsFlashlight = false;
+
+	/** The flashlight actor class to spawn when this item is equipped. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Equipment",
+		meta = (EditCondition = "bIsFlashlight"))
+	TSubclassOf<AFlashlightActor> FlashlightClass;
 
 	// The weapon actor to spawn when this item is equipped. Only relevant for Weapon category.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Weapon",

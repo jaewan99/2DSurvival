@@ -18,6 +18,7 @@ class UItemDefinition;
 class UInputAction;
 class UInputMappingContext;
 class AWeaponBase;
+class AFlashlightActor;
 class ADraggableProp;
 class UHealthHUDWidget;
 class UHotbarWidget;
@@ -218,6 +219,13 @@ public:
 	virtual void UnequipWeapon_Implementation();
 
 	/**
+	 * Unequips the flashlight — detaches and destroys the flashlight actor.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Flashlight")
+	void UnequipFlashlight();
+	virtual void UnequipFlashlight_Implementation();
+
+	/**
 	 * IDamageable implementation — called by enemy weapon hitboxes or unarmed sweeps.
 	 * Damages the Body part. Override in Blueprint for more granular hit location logic.
 	 */
@@ -251,6 +259,15 @@ public:
 	// Currently equipped weapon actor. Null if nothing is equipped.
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<AWeaponBase> EquippedWeapon;
+
+	// Socket name on the character mesh where the flashlight attaches.
+	// Create this socket in the Skeleton editor and set the name in BP_BaseCharacter.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Flashlight")
+	FName FlashlightSocketName = FName("FlashlightSocket");
+
+	// Currently equipped flashlight actor. Null if no flashlight is equipped.
+	UPROPERTY(BlueprintReadOnly, Category = "Flashlight")
+	TObjectPtr<AFlashlightActor> EquippedFlashlight;
 
 	// The prop currently being dragged. Null when not dragging.
 	UPROPERTY(BlueprintReadOnly, Category = "Drag")

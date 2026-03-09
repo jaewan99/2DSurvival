@@ -51,6 +51,24 @@ void UNeedsComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	if (Thirst  <= 0.f) MoodDrain += CriticalMoodDrainRate;
 	if (Fatigue <= 0.f) MoodDrain += CriticalMoodDrainRate;
 	ModifyMood(-MoodDrain * DeltaTime);
+
+	// Weather modifiers — only apply when outdoors.
+	if (!bIsIndoors)
+	{
+		if (WeatherThirstBoostRate > 0.f)
+		{
+			const float OldThirst = Thirst;
+			Thirst = FMath::Clamp(Thirst + WeatherThirstBoostRate * DeltaTime, 0.f, 100.f);
+			if (!FMath::IsNearlyEqual(Thirst, OldThirst, 0.001f))
+			{
+				OnNeedChanged.Broadcast(ENeedType::Thirst, Thirst, 100.f, Thirst < WarningThreshold);
+			}
+		}
+		if (WeatherMoodDrainRate > 0.f)
+		{
+			ModifyMood(-WeatherMoodDrainRate * DeltaTime);
+		}
+	}
 }
 
 void UNeedsComponent::DrainNeed(ENeedType NeedType, float DeltaTime)
@@ -150,6 +168,12 @@ bool UNeedsComponent::IsHealthRegenBlocked() const
 void UNeedsComponent::SetActiveMovement(bool bActive)
 {
 	bIsActiveMovement = bActive;
+}
+
+void UNeedsComponent::SetWeatherModifiers(float ThirstBoost, float MoodDrain)
+{
+	WeatherThirstBoostRate = FMath::Max(0.f, ThirstBoost);
+	WeatherMoodDrainRate   = FMath::Max(0.f, MoodDrain);
 }
 
 void UNeedsComponent::ModifyMood(float Delta)

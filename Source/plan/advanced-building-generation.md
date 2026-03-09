@@ -102,23 +102,27 @@ Blueprint children: `BP_Cabinet`, `BP_MedicalLocker`, `BP_ShopShelf`, `BP_Fridge
 
 ---
 
-## Decorative Props
+## Decorative Props ✅ DONE
 
-Pure AActor subclasses with just a `UStaticMeshComponent`. No interaction.
-Base C++ class: `ADecorativeProp` — minimal, just mesh + optional point light (for lamps).
-Blueprint children: `BP_Chair`, `BP_Table`, `BP_HospitalBed`, `BP_CounterDesk`, etc.
+`ADecorativeProp` (C++) is implemented with two extra properties:
+- `SpawnProbability` (float 0–1, default 1.0) — if a random roll fails in `BeginPlay`, actor is hidden + collision disabled.
+- `VariantMeshes` (`TArray<TSoftObjectPtr<UStaticMesh>>`, default empty) — if populated, `BeginPlay` picks one at random and sets it on the Mesh component. A null entry keeps the Blueprint default mesh.
+
+Blueprint children: `BP_Chair`, `BP_Table`, `BP_HospitalBed`, `BP_CounterDesk`, etc. (assign mesh only).
+
+**Note on walls**: `ARoomCell` no longer has LeftWall/RightWall/BackWall in C++. Only Floor and Ceiling are in C++ (runtime-positioned by `SetRoomDimensions`). Add walls directly in the Blueprint viewport — they stay at fixed positions relative to the actor root.
 
 ---
 
 ## Implementation Order
 
 1. Add `Restaurant` to `EBuildingType`
-2. Create `ERoomArchetype` + `ERoomPropPlacement` enums (new header `RoomDefinition.h`)
-3. Create `FRoomPropEntry` struct and `URoomDefinition` data asset class
-4. Update `UBuildingDefinition` (new room list fields, keep stairs/elevator/door fields)
+2. ✅ Create `ERoomArchetype` + `ERoomCategory` enums — done in `RoomDefinition.h` (`ERoomPropPlacement` still needed)
+3. ✅ Create `FRoomPropEntry` struct and `URoomDefinition` data asset — `URoomDefinition` done; `FRoomPropEntry` + `ERoomPropPlacement` still needed
+4. Update `UBuildingDefinition` — add `GroundFloorRooms` / `UpperFloorRooms` arrays (remove single `RoomActorClass`); keep stairs/elevator/door fields
 5. Create `ALootableProp` (C++) — IInteractable, LootTable, one-time-loot logic
-6. Create `ADecorativeProp` (C++) — mesh only
-7. Add `ApplyRoomDefinition` BlueprintNativeEvent to a C++ base class or interface
+6. ✅ Create `ADecorativeProp` (C++) — done with `SpawnProbability` + `VariantMeshes`
+7. ✅ Add `ApplyRoomDefinition` BlueprintNativeEvent — done on `ARoomCell` (C++ base is no-op; override in Blueprint)
 8. Update `ABuildingGenerator::Generate()` — archetype selection + prop spawning
 9. Blueprint steps (documented at bottom)
 

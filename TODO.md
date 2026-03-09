@@ -11,6 +11,13 @@ Items are loosely ordered by priority / dependency.
   - Either way, the AnimBP should drive blend space from `GetVelocity().Size()` so animation naturally reflects the capped speed.
 - [x] **Hotbar system (C++)** — `UHotbarComponent` on BaseCharacter, 6 slots, active index, `OnHotbarChanged` delegate, SelectSlot/CycleSlot, input bindings in BaseCharacter.
 - [x] **Hotbar widget (C++)** — `UHotbarWidget` builds 6 slots dynamically in NativeConstruct (border + icon + key label). Gold highlight on active slot. Always visible at bottom of screen.
+- [x] **Dynamic hotbar slots** — start with 0, `HotbarBonus` on `UItemDefinition` grants slots (belt/jacket/bag). `ExpandHotbar`/`ShrinkHotbar` called by `OnInventoryChanged` recalculation.
+- [x] **Blueprint-customizable slot widget** — `UHotbarSlotWidget` base with `BindWidgetOptional` SlotIcon/SlotKeyLabel/ActiveHighlight; `OnSlotRefreshed` BlueprintImplementableEvent.
+- [ ] **Blueprint steps — Hotbar widget setup:**
+  1. Create WBP_HotbarSlot (parent: `UHotbarSlotWidget`). Design freely. Optionally add: Image "SlotIcon", TextBlock "SlotKeyLabel", any Widget "ActiveHighlight".
+  2. Create WBP_HotbarWidget (parent: `UHotbarWidget`). Add HorizontalBox named "SlotContainer". Set SlotWidgetClass = WBP_HotbarSlot in class defaults.
+  3. Assign WBP_HotbarWidget to HotbarWidgetClass on BP_BaseCharacter (already done if previously set).
+  4. Create item data assets for equipment: DA_Belt (HotbarBonus=1), DA_Jacket (HotbarBonus=1), DA_Satchel (HotbarBonus=2), DA_Backpack (HotbarBonus=2, BonusSlots=6). Assign icons.
 - [x] **Unequip from context menu** — right-click equipped weapon → show Unequip button → calls `UnequipWeapon()`.
 - [x] **Blueprint: add Unequip button to WBP_ContextMenu** — add `Btn_Unequip` (Collapsed by default) to Vertical Box; update Event Construct to show Unequip when `EquippedWeapon.SourceItemDef == SlotData.ItemDef`; `Btn_Unequip OnClicked` → `UnequipWeapon()` → `Remove from Parent`.
 - [x] **Backpack (C++)** — `BonusSlots` on `UItemDefinition`, `ExpandSlots`/`ShrinkSlots`/`CanRemoveItem` on `UInventoryComponent`. Auto-expands on add, blocks removal if bonus slots occupied.
@@ -71,8 +78,6 @@ Items are loosely ordered by priority / dependency.
 - [x] **Enemy health bar** — `UEnemyHealthBarWidget` (C++ UUserWidget, BindWidget ProgressBar). Attached via `UWidgetComponent` in Screen space above enemy's head. Hidden until first damage hit. Color-coded green/yellow/red.
 - [x] **Drop loot** — `FLootEntry` struct (ItemDef, DropChance, MinCount, MaxCount). `LootTable` TArray on AEnemyBase (EditDefaultsOnly). On death: roll per entry, spawn `AWorldItem` actors with random offset.
 - [x] **World item pickup** — `AWorldItem` (AActor + IInteractable). Instant interaction type. Press E → `TryAddItem` on player InventoryComponent → self-destruct on success.
-- [ ] **Enemy spawner** — Blueprint Actor with spawn radius, max count, respawn delay; spawns `BP_EnemyBase` variants in the world.
-
 ## Crafting
 
 - [x] **Recipe data asset** — `UCraftingRecipe` (UDataAsset): `RecipeID`, `Ingredients` (`FIngredientEntry` array of ItemID + Count), `OutputItemID`, `OutputCount`.
@@ -155,3 +160,98 @@ Player can place, move, and remove furniture/decorations inside their base.
 - [ ] **Move / remove** — interact with a placed actor to get a context menu: Move (re-enter placement mode with that actor) or Pick Up (destroys actor, returns item to inventory).
 - [ ] **Room zones** — optional axis-aligned box volumes that define valid placement areas; placement outside a zone is rejected. Allows "only place furniture indoors".
 - [ ] **Persistence** — save placed actor transforms + class references in `USaveGame`; respawn them on load.
+
+## Status Effects
+
+Tick-based debuffs applied to the player from wounds, environment, or enemy attacks. Very Project Zomboid.
+
+- [ ] **Status effect types** — `EStatusEffect` enum: `Bleeding`, `Infected`, `Poisoned`, `BrokenBone`. Each has a severity float and duration.
+- [ ] **UStatusEffectComponent (C++)** — on BaseCharacter. `TArray<FActiveStatusEffect>` ticked each frame. `ApplyEffect(EStatusEffect, Severity, Duration)` and `RemoveEffect(EStatusEffect)`. `FOnStatusEffectsChanged` delegate for HUD refresh.
+- [ ] **Per-effect behaviour** — Bleeding: 0.3 HP/s drain on Body; Infected: spreads to nearby body parts over time, 0.1 HP/s; Poisoned: drains Hunger + Thirst 2× faster + 0.2 HP/s; BrokenBone: halves `MaxWalkSpeed` (via `RecalculateMovementSpeed`).
+- [ ] **Wound trigger** — `TakeMeleeDamage_Implementation`: high-damage hits (> threshold) have a configurable chance to apply Bleeding. Untreated Bleeding after N seconds transitions to Infected.
+- [ ] **Cure items** — `UItemDefinition` gains `StatusEffectCure` (EStatusEffect, EditCondition=Consumable). `UseItem_Implementation` calls `StatusEffectComp->RemoveEffect`. E.g. Bandage cures Bleeding, Antibiotics cures Infected.
+- [ ] **Status HUD** — extend `UNeedsWarningWidget` or create a separate strip of status icons that appear when effects are active.
+- [ ] **Save/load** — serialize active effects (type + remaining duration) into `UTwoDSurvivalSaveGame`.
+
+## Flashlight
+
+Equippable light source critical for nighttime exploration.
+
+- [x] **Flashlight item** — `bIsFlashlight` + `FlashlightClass` on `UItemDefinition`. Equipping spawns `AFlashlightActor` attached to `FlashlightSocket`. Light on by default when equipped.
+- [x] **AFlashlightActor (C++)** — `USpotLightComponent` (cone 25°, 1200 cm). `BatteryCharge` (0–100) drains at `DrainRate`/s while on. `Toggle()` / `RefillBattery(Amount)`. `IsInCone(WorldPos)` for enemy aggro query. Tune visuals in BP_FlashlightActor SpotLight component.
+- [x] **Battery item** — `BatteryRestoreAmount` float on `UItemDefinition` (Consumable). `UseItem_Implementation` calls `EquippedFlashlight->RefillBattery(Amount)` if flashlight is equipped.
+- [x] **Toggle** — selecting the same hotbar slot while flashlight is already equipped calls `Toggle()` instead of re-equipping. Dead battery blocks toggling on.
+- [x] **Enemy interaction** — `AEnemyBase::DetectPlayer` doubles `AggroRange` when enemy is within the flashlight's `OuterConeAngle`. Uses `AFlashlightActor::IsInCone()`.
+- [ ] **Blueprint steps — Flashlight:**
+  1. Create socket **`FlashlightSocket`** on the character skeleton in the Skeleton editor (place near the hand/chest).
+  2. Create Blueprint child **`BP_FlashlightActor`** (parent: `AFlashlightActor`). Tune the SpotLight component: Intensity, cone angles, attenuation radius, light color.
+  3. Create item data asset **`DA_Flashlight`**: set `bIsFlashlight = true`, `FlashlightClass = BP_FlashlightActor`, assign an Icon.
+  4. Create item data asset **`DA_Battery`**: set `ItemCategory = Consumable`, `BatteryRestoreAmount = 100`, assign an Icon.
+  5. Set **`FlashlightSocketName = "FlashlightSocket"`** on **BP_BaseCharacter** Details → Flashlight.
+
+## Sight Environment
+
+Backside-darkening effect — the character's back face appears dim and desaturated. C++ already pushes `CharacterForward` each tick; only material editor work remains.
+
+- [x] **C++ side** — `CharacterMIDs` created in `BeginPlay`; `CharacterForward` vector pushed via MID every `Tick`.
+- [ ] **Blueprint steps — Sight Environment material** — Open the character's material in the Material Editor:
+  1. Add a **Vector Parameter** node named **`CharacterForward`**, default value `(1, 0, 0, 0)`.
+  2. Compute **BackFactor**: `VertexNormalWS` → `Dot Product` (with CharacterForward) → `Negate` → `Clamp(0, 1)`.
+  3. Darken back: `Multiply(BaseColor, 0.15)` → `Lerp(A=BaseColor, B=darkened, Alpha=BackFactor)` → call this **DimColor**.
+  4. Desaturate: `Multiply(BackFactor, 0.7)` → use as Fraction input of `Desaturation(DimColor)` → connect result to the **Base Color** pin.
+  5. (Optional) Flatten normals on back: `Multiply(BackFactor, 0.85)` → `Lerp(A=NormalMap, B=Constant3(0,0,1), Alpha=result)` → connect to **Normal** pin.
+  6. Save and compile the material. No Blueprint logic needed — C++ drives the parameter automatically.
+  - See `Source/plan/sight-environment.md` for full node graph diagrams and tuning values.
+
+## Weather System
+
+Randomised weather states that layer on top of the day/night cycle, affecting visuals, needs, and enemy behaviour.
+
+- [x] **AWeatherManager (C++ AActor)** — tick-driven state machine: `Clear`, `Cloudy`, `Rain`, `HeavyRain`, `Snow`. Random duration per state (EditAnywhere min/max). Season-weighted transitions (Spring: rain 20%, Summer: heavy rain 10%, Winter: snow 20%, no rain).
+- [x] **Rain/Snow states** — pushes fog density offset + scene tint multiplier to `ATimeManager`'s shared components. Plays ambient sound loop. Thirst restore rate boosted (Rain +0.02/s, HeavyRain +0.04/s). Mood drained extra when outdoors (Rain 0.02/s, HeavyRain 0.04/s, Snow 0.01/s).
+- [x] **`FOnWeatherChanged` delegate** — broadcast on every state transition. `bIsRaining` / `bIsSnowing` BlueprintReadOnly flags for other systems to query.
+- [x] **Shelter detection** — `bIsIndoors` on `UNeedsComponent` set by `ABuildingEntrance` on enter/exit. Weather thirst/mood effects skip when indoors.
+- [x] **Save/load** — `SavedWeatherState` + `SavedWeatherElapsed` in `UTwoDSurvivalSaveGame`. Restored via `AWeatherManager::RestoreWeather()` on load.
+- [x] **Calendar system** — `ATimeManager` gains `CurrentDay/Month/Year`, `DaysPerMonth` (default 30), `ESeason` enum (Spring months 1–3, Summer 4–6, Fall 7–9, Winter 10–12). `OnDayChanged` delegate fires each midnight wrap. `GetDateText()` / `GetCurrentSeason()` / `SetCalendar()` public API. Calendar saved/loaded via `SavedDay/Month/Year/TimeOfDay`.
+- [ ] **Blueprint steps — WeatherManager** — Set up the weather system in the editor:
+  1. Create Blueprint child **`BP_WeatherManager`** (parent: `AWeatherManager`). Place one instance in the persistent level.
+  2. In **BP_WeatherManager** Details panel → Weather|Sound: assign **`SFX_Rain`**, **`SFX_HeavyRain`**, **`SFX_Snow`** sound assets (Sound Wave or Sound Cue).
+  3. Optionally tune **`MinStateDurationSeconds`** / **`MaxStateDurationSeconds`** (defaults: 120 s / 600 s).
+  4. Press Play — weather will transition automatically. Check the Output Log for `[WeatherManager] State →` messages to confirm it's running.
+
+## Quest / Journal System
+
+Ties NPC trades, map exploration, and world events into a narrative loop.
+
+- [ ] **UQuestDefinition (UDataAsset)** — QuestID (FName), Title (FText), Description (FText), linked NPCID (FName), `EQuestCompletionType` (TradeCompleted / StreetVisited / ItemCollected), TargetID (FName — NPC ID / Street ID / Item ID), RewardItemID + RewardCount.
+- [ ] **UQuestComponent (C++)** — on BaseCharacter. `TArray<FName> ActiveQuests`, `TSet<FName> CompletedQuests`. `StartQuest(QuestID)`, `CheckCompletion()`. Binds `ANPCActor::OnTradeCompleted` and `UStreetManager::OnStreetChanged` to auto-trigger completion checks.
+- [ ] **Quest givers** — `UNPCDefinition` gains optional `StartsQuestID (FName)`. On dialogue open: if quest not started yet, `QuestComponent->StartQuest(StartsQuestID)`.
+- [ ] **Journal widget (J key)** — `UJournalWidget` (C++ UUserWidget): left list of active/completed quests, right panel shows title + description + completion status. Built same pattern as `UCraftingWidget`. Toggle with J key via programmatic `IA_ToggleJournal`.
+- [ ] **Reward delivery** — on quest complete: `TryAddItem(RewardItem, RewardCount)` on player inventory + `NeedsComponent->ModifyMood(10.f)`.
+- [ ] **Save/load** — `TSet<FName> ActiveQuests` + `TSet<FName> CompletedQuests` added to `UTwoDSurvivalSaveGame`.
+
+## Random World Events
+
+Scheduled events that fire on day/night transitions, keeping the world feeling alive.
+
+- [ ] **FWorldEvent struct** — EventID (FName), `EWorldEventType` enum (TravellingTrader / ScavengerRaid / SupplyCrate), SpawnChance (float 0–1), MinDaysBetween (int32).
+- [ ] **AWorldEventManager (C++ AActor)** — binds `ATimeManager::OnDayPhaseChanged`. On each night start: iterates `EventTable (TArray<FWorldEvent>)`, rolls per entry vs SpawnChance, fires the event if cooldown elapsed.
+- [ ] **Travelling Trader** — spawns a special `BP_NPC_Trader` on the current street with a randomised inventory of rare items for trade. Despawns at next dawn.
+- [ ] **Scavenger Raid** — spawns 2–4 extra enemies on the current street immediately, bypassing the normal spawner cap.
+- [ ] **Supply Crate** — spawns an `AWorldItem` cluster (3–5 random loot items from a configurable rare loot table) at a fixed spawn point in the level.
+- [ ] **HUD notification** — `FOnWorldEventStarted` delegate broadcast; `UStreetHUDWidget` shows a brief text banner (e.g. "A trader has arrived!") for 5 seconds.
+
+## Skill / XP System
+
+Passive progression that rewards consistent playstyle choices.
+
+- [ ] **ESkillType enum** — `Combat`, `Crafting`, `Scavenging`.
+- [ ] **USkillComponent (C++)** — on BaseCharacter. `TMap<ESkillType, int32> XP` + `TMap<ESkillType, int32> Level`. `AddXP(ESkillType, Amount)`: accumulates XP, levels up at thresholds (100 × Level), broadcasts `FOnSkillLevelUp`. `GetLevel(ESkillType)` queried by other systems.
+- [ ] **XP sources** — Combat: `+15 XP` per enemy kill (bound to `AEnemyBase::OnDeath` via delegate). Crafting: `+10 XP` per successful craft (bound to `UCraftingComponent::OnCraftingChanged`). Scavenging: `+5 XP` per item pickup (in `AWorldItem::OnInteract`).
+- [ ] **Level bonuses** — Combat Lv2: +10% melee damage; Lv3: attack cooldown –15%. Crafting Lv2: unlocks a second tier of recipes (check `GetLevel(Crafting) >= 2` in `CanCraft`); Lv3: 10% chance to craft double output. Scavenging Lv2: +1 extra item roll on enemy loot tables; Lv3: `AWorldItem` pickup range +50%.
+- [ ] **Skill HUD** — small persistent widget (bottom-left) showing current level per skill; flashes on level-up with `FOnSkillLevelUp` delegate. Or surface in the Journal widget as a second tab.
+- [ ] **Save/load** — serialize `XP` + `Level` maps into `UTwoDSurvivalSaveGame`.
+
+## Low Priority
+
+- [ ] **Enemy spawner** — Blueprint Actor with spawn radius, max count, respawn delay; spawns `BP_EnemyBase` variants in the world.

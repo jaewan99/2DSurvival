@@ -2,6 +2,8 @@
 
 #include "World/BuildingEntrance.h"
 #include "World/StreetManager.h"
+#include "Character/BaseCharacter.h"
+#include "Components/NeedsComponent.h"
 #include "Components/BoxComponent.h"
 #include "Engine/GameInstance.h"
 
@@ -41,6 +43,7 @@ void ABuildingEntrance::OnInteract_Implementation(ABaseCharacter* Interactor)
 	if (SM->bIsInsideBuilding)
 	{
 		// Inside the building — exit back to the street.
+		if (Interactor) Interactor->NeedsComponent->bIsIndoors = false;
 		SM->OnPlayerExitBuilding();
 	}
 	else
@@ -51,6 +54,7 @@ void ABuildingEntrance::OnInteract_Implementation(ABaseCharacter* Interactor)
 			UE_LOG(LogTemp, Warning, TEXT("[BuildingEntrance] BuildingExitID is not set on '%s'."), *GetName());
 			return;
 		}
+		if (Interactor) Interactor->NeedsComponent->bIsIndoors = true;
 		SM->OnPlayerCrossedExit(BuildingExitID);
 	}
 }
