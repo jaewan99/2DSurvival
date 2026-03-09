@@ -27,6 +27,13 @@ Items are loosely ordered by priority / dependency.
 ## World / Interaction
 
 - [x] **Door** — `ADoorActor` (C++ AActor + IInteractable). `DoorMesh` (BlockAll closed / NoCollision open), `InteractionBox`, `bIsLocked`, `bStartOpen`. Prompt reads "Open Door" / "Close Door" / "Locked". Blueprint child `BP_DoorActor` (assign mesh).
+- [ ] **Blueprint steps — Sound effects** — Assign Sound Wave / Sound Cue assets in the editor (all EditDefaultsOnly, no C++ changes needed):
+  - **BP_BaseCharacter** Details → Sound: `SFX_Interact`, `SFX_InventoryOpen`, `SFX_InventoryClose`, `SFX_CraftOpen`, `SFX_CraftClose`, `SFX_DialogueOpen`, `SFX_DialogueClose`, `SFX_HealthHUDToggle`
+  - In **WBP_InventoryWidget** (or BP_BaseCharacter's `ToggleInventory` override): call `PlayUISound(SFX_InventoryOpen)` on open, `PlayUISound(SFX_InventoryClose)` on close
+  - **BP_DoorActor** Details → Sound: `SFX_Open`, `SFX_Close`, `SFX_Locked`
+  - **BP_WorldItem** Details → Sound: `SFX_Pickup`
+  - **WBP_CraftingWidget** Class Defaults → Sound: `SFX_CraftSuccess`, `SFX_CraftFail`
+  - **WBP_DialogueWidget** Class Defaults → Sound: `SFX_NextLine`, `SFX_TradeComplete`
 
 ## Health
 
@@ -97,7 +104,16 @@ Each "map" is a street or building sublevel streamed seamlessly. Exits are now n
 - [x] **Exit direction display** — `UStreetHUDWidget`: arrows shown for exits named `"Left"`, `"Right"`, `"Up"` by convention. Name exits this way to drive the default HUD arrows.
 - [x] **World map widget** — `UMapWidget` (C++ UUserWidget): BFS node graph from starting street, city-colored region backgrounds, grey street lines, amber highway lines drawn via `NativePaint`. Visited streets tracked in `UStreetManager::VisitedStreetIDs`. Toggle with M key. Blueprint child `WBP_MapWidget` (CanvasPanel "MapCanvas" + Button "CloseButton").
 - [x] **City system** — `UCityDefinition` (UDataAsset): CityID, CityName, MapColor. `UStreetDefinition` extended with `OwnerCity`, `bIsHighway`, `MapLabel`. `UStreetManager` tracks `CurrentCity`, `VisitedStreetIDs`, `StartingStreetDef`; broadcasts `OnCityChanged` on city transition. Map widget groups streets into colored city regions. Blueprint setup: create `DA_City_*` assets, set `OwnerCity` on each `DA_Street_*`, set `bIsHighway=true` on highway streets.
-- [ ] **Blueprint steps — Map** — Create `WBP_MapWidget` (CanvasPanel "MapCanvas" + Button "CloseButton"). Assign `MapWidgetClass` on `BP_BaseCharacter`.
+- [ ] **Blueprint steps — Map widget** — Create Widget Blueprint `WBP_MapWidget` (parent: `UMapWidget`):
+  1. Root → Canvas Panel named **`MapCanvas`** (fill the widget area, 800×500 recommended)
+  2. Add a **Button** named **`CloseButton`** anchored top-right
+  3. Assign `MapWidgetClass = WBP_MapWidget` on **BP_BaseCharacter** Details panel → UI
+  4. Press **M** in-game to test the map opens and closes
+- [ ] **Blueprint steps — City data** — Wire up the city system in the editor:
+  1. Right-click Content Browser → Miscellaneous → Data Asset → **UCityDefinition**. Create one per city (e.g. `DA_City_Riverside`, `DA_City_Downtown`). Set **CityID**, **CityName**, **MapColor** (unique hue per city).
+  2. Open each **DA_Street_*** data asset. Set **OwnerCity** to the correct `DA_City_*`. Leave null for highway/wilderness streets.
+  3. On highway connector streets (segments between cities) set **bIsHighway = true** and leave **OwnerCity** null.
+  4. Optionally set **MapLabel** (short text) on any street whose name is too long for the map node.
 
 ## NPC Interaction
 
@@ -108,7 +124,26 @@ NPCs with unique roles (drug dealer, father, young girl, etc.) that the player c
 - [x] **Dialogue widget** — `UDialogueWidget` (C++ UUserWidget): PortraitImage, NPCNameText, DialogueText, NextButton cycles lines, GiveItemButton (enabled when player has required items), CloseButton. Portrait set via FSlateBrush + SetResourceObject.
 - [x] **Give item flow** — CountItemByID → RemoveItemByID → TryAddItem reward → NotifyTradeCompleted → switch to PostTradeDialogue lines.
 - [x] **NPC state persistence** — `TSet<FName> CompletedNPCTrades` in `UTwoDSurvivalSaveGame`. Saved via GetAllActorsOfClass scan; restored at LoadGame.
-- [ ] **Blueprint steps** — Create `WBP_DialogueWidget` (PortraitImage, NPCNameText, DialogueText, NextButton, GiveItemButton, GiveItemLabel, CloseButton). Assign `DialogueWidgetClass` on `BP_BaseCharacter`. Create `DA_NPC_*` data assets. Create `BP_NPCActor` children with mesh + NPCDef assigned.
+- [ ] **Blueprint steps — Dialogue widget** — Create Widget Blueprint `WBP_DialogueWidget` (parent: `UDialogueWidget`):
+  1. Add **Image** named **`PortraitImage`** (left side, e.g. 128×128)
+  2. Add **TextBlock** named **`NPCNameText`** (NPC name header)
+  3. Add **TextBlock** named **`DialogueText`** (body, multi-line, wrapping on)
+  4. Add **Button** named **`NextButton`** with a child TextBlock labelled "Next ▶"
+  5. Add **Button** named **`GiveItemButton`** with a child TextBlock labelled "Give Item"
+  6. Add **TextBlock** named **`GiveItemLabel`** (shows "Item Name ×Count" — sits near GiveItemButton)
+  7. Add **Button** named **`CloseButton`** (top-right ✕)
+  8. Assign `DialogueWidgetClass = WBP_DialogueWidget` on **BP_BaseCharacter** Details panel → UI
+- [ ] **Blueprint steps — NPC data assets** — For each NPC:
+  1. Right-click → Miscellaneous → Data Asset → **UNPCDefinition**. Name it `DA_NPC_<Role>` (e.g. `DA_NPC_DrugDealer`).
+  2. Set **NPCID** (stable FName, never rename), **NPCName**, **Portrait** (Texture2D).
+  3. Fill **DialogueLines** array with the NPC's lines of dialogue.
+  4. If this NPC trades: enable **bHasTradeOffer**, set **RequiredItem** + **RequiredCount**, set **RewardItem** + **RewardCount**, fill **PostTradeDialogue** lines (shown after trade).
+- [ ] **Blueprint steps — NPC actors** — For each NPC variant:
+  1. Create Blueprint child of **ANPCActor** (e.g. `BP_NPC_DrugDealer`).
+  2. Add a **Static Mesh Component** for the NPC's appearance.
+  3. Set **NPCDef** = the matching `DA_NPC_*` asset in Details panel.
+  4. Place `BP_NPC_*` instances in level sublevels. The **InteractionBox** (already in C++) handles proximity; no extra setup needed.
+  5. Optionally bind **OnTradeCompleted** in the level Blueprint to unlock doors, trigger events, etc.
 
 ## House Customization
 
