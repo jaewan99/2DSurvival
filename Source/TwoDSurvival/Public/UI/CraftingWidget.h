@@ -15,6 +15,7 @@ class UVerticalBox;
 class UImage;
 class UTextBlock;
 class UButton;
+class USoundBase;
 
 /**
  * Main crafting UI widget.
@@ -42,6 +43,12 @@ public:
 	// Assign WBP_CraftingRecipeEntry in the Blueprint child's Class Defaults.
 	UPROPERTY(EditDefaultsOnly, Category = "Crafting")
 	TSubclassOf<UCraftingRecipeEntry> RecipeEntryClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_CraftSuccess;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_CraftFail;
 
 protected:
 	// Left panel — scrollable recipe list

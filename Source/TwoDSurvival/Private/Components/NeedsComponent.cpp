@@ -44,6 +44,13 @@ void UNeedsComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	DrainNeed(ENeedType::Thirst,  DeltaTime);
 	DrainNeed(ENeedType::Fatigue, DeltaTime);
 	ApplyCriticalEffects(DeltaTime);
+
+	// Passive mood drain + extra per critical need
+	float MoodDrain = MoodPassiveDrainRate;
+	if (Hunger  <= 0.f) MoodDrain += CriticalMoodDrainRate;
+	if (Thirst  <= 0.f) MoodDrain += CriticalMoodDrainRate;
+	if (Fatigue <= 0.f) MoodDrain += CriticalMoodDrainRate;
+	ModifyMood(-MoodDrain * DeltaTime);
 }
 
 void UNeedsComponent::DrainNeed(ENeedType NeedType, float DeltaTime)
@@ -143,4 +150,25 @@ bool UNeedsComponent::IsHealthRegenBlocked() const
 void UNeedsComponent::SetActiveMovement(bool bActive)
 {
 	bIsActiveMovement = bActive;
+}
+
+void UNeedsComponent::ModifyMood(float Delta)
+{
+	const float OldMood = Mood;
+	Mood = FMath::Clamp(Mood + Delta, 0.f, 100.f);
+	if (!FMath::IsNearlyEqual(Mood, OldMood, 0.001f))
+	{
+		OnMoodChanged.Broadcast(Mood);
+	}
+}
+
+float UNeedsComponent::GetMood() const
+{
+	return Mood;
+}
+
+void UNeedsComponent::SetMood(float Value)
+{
+	Mood = FMath::Clamp(Value, 0.f, 100.f);
+	OnMoodChanged.Broadcast(Mood);
 }

@@ -88,4 +88,14 @@ public:
 
 	UPROPERTY()
 	float SavedFatigue = 100.f;
+
+	UPROPERTY()
+	float SavedMood = 100.f;
+
+	UPROPERTY()
+	TSet<FName> VisitedStreetIDs;
+
+	// NPCIDs for which the player has completed the trade offer.
+	UPROPERTY()
+	TSet<FName> CompletedNPCTrades;
 };

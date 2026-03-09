@@ -26,7 +26,7 @@ Items are loosely ordered by priority / dependency.
 
 ## World / Interaction
 
-- [x] **Door** — Blueprint Actor implementing `IInteractable` (Instant type). `OnInteract` toggles open/close via rotation or animation.
+- [x] **Door** — `ADoorActor` (C++ AActor + IInteractable). `DoorMesh` (BlockAll closed / NoCollision open), `InteractionBox`, `bIsLocked`, `bStartOpen`. Prompt reads "Open Door" / "Close Door" / "Locked". Blueprint child `BP_DoorActor` (assign mesh).
 
 ## Health
 
@@ -68,47 +68,47 @@ Items are loosely ordered by priority / dependency.
 
 ## Crafting
 
-- [ ] **Recipe data asset** — `UCraftingRecipe` (UDataAsset): array of `FIngredient` (ItemDef + quantity), output ItemDef + quantity, optional required tool/station.
-- [ ] **Crafting component** — `UCraftingComponent` (C++) on the player: `CanCraft(Recipe)` checks inventory, `Craft(Recipe)` consumes ingredients and calls `InventoryComponent->TryAddItem`.
-- [ ] **Crafting UI** — `WBP_CraftingWidget`: scrollable recipe list on the left, selected recipe detail (ingredients, output) on the right, Craft button (greyed out if missing ingredients). Toggle with a key (e.g. C).
+- [x] **Recipe data asset** — `UCraftingRecipe` (UDataAsset): `RecipeID`, `Ingredients` (`FIngredientEntry` array of ItemID + Count), `OutputItemID`, `OutputCount`.
+- [x] **Crafting component** — `UCraftingComponent` (C++) on the player: auto-scans all recipes + item defs via AssetRegistry. `CanCraft`, `TryCraft`, `FindItemDef` (public).
+- [x] **Crafting UI** — `UCraftingWidget` (C++ UUserWidget): left `ScrollBox` recipe list, right detail panel (output icon/name, ingredient rows with have/need color-coded, craft button, status text). Binds `OnInventoryChanged` to refresh craftability.
 - [ ] **Item upgrading** — extend `UCraftingRecipe` with an optional `InputItemDef` (item being upgraded) + `OutputItemDef` (upgraded result). `UCraftingComponent->Upgrade(Recipe, SlotIndex)` removes the base item and adds the upgraded one.
-- [ ] **Crafting station** — Blueprint Actor (workbench, forge, etc.) implementing `IInteractable`; `OnInteract` opens `WBP_CraftingWidget` filtered to recipes that require that station.
+- [x] **Crafting station** — `ACraftingTable` (C++ AActor + IInteractable): `UBoxComponent InteractionBox`, press E → `ToggleCrafting()`. `OnBoxEndOverlap` calls `Player->CloseCrafting()` when player walks away.
 
 ## Moods / Needs
 
 Inspired by Project Zomboid — needs decay over time and affect gameplay stats.
 
-- [ ] **Needs component** — `UNeedsComponent` (C++) on the player. Tracks float values (0–100) for each need. Decays via `Tick` at configurable rates. Broadcasts `OnNeedChanged(ENeed, float NewValue)` delegate.
-- [ ] **Need types** — initial set:
-  - `Hunger` — low hunger reduces stamina regen / movement speed at critical level
-  - `Thirst` — faster decay than hunger; critical level applies damage over time to Body
-  - `Fatigue` — increases over time without rest; slows movement and reduces attack damage
-  - `Mood` / `Depression` — degrades when other needs are critical, when isolated, or on death; low mood reduces XP gain, dims screen tint slightly
-- [ ] **Need effects** — `UNeedsComponent` fires threshold callbacks (e.g. at 25% and 0%) that `ABaseCharacter` listens to and applies stat modifiers (walk speed, damage multiplier, DoT).
-- [ ] **Satisfying needs** — consuming food items reduces Hunger (extend `UseItem`); water items reduce Thirst; sleeping (interact with bed) restores Fatigue over time.
-- [ ] **Needs HUD** — `WBP_NeedsHUD`: small always-visible (or H-toggled) panel showing icons + bars for each need. Color shifts yellow → red as value drops. Urgent needs pulse or show warning text.
-- [ ] **Mood modifiers** — positive events (eating a hot meal, completing a craft, finding rare loot) give a temporary Mood boost; negative events (taking damage, staying in darkness, witnessing death) reduce it.
+- [x] **Needs component** — `UNeedsComponent` (C++) on the player. Tracks Hunger/Thirst/Fatigue (0–100). Tick-driven drain; doubled when running/attacking. `FOnNeedChanged` delegate.
+- [x] **Need types** — Hunger (0.055/s), Thirst (0.075/s), Fatigue (0.04/s). At 0: 0.5 HP/s DoT on Body. Below 50%: speed ×0.7, damage ×0.8.
+- [x] **Need effects** — speed/damage multipliers applied via `RecalculateMovementSpeed()` and `OnHitboxOverlap`. Critical HP drain via `HealthComponent->ApplyDamage`.
+- [x] **Satisfying needs** — `HungerRestore`/`ThirstRestore`/`FatigueRestore` on `UItemDefinition`. Sleeping (ABedActor) restores Fatigue at 3× rate; auto-wakes when full (if started below 95%).
+- [x] **Needs HUD** — `UNeedsWarningWidget` (C++): `NeedsContainer` VerticalBox BindWidget, 3 icon slots built dynamically. Icons collapse when need ≥ 50%, appear when critical. Blueprint child `WBP_NeedsWarning`.
+- [x] **Mood system** — `UNeedsComponent` gains `Mood` float (0–100), drain/boost events, `FOnMoodChanged` delegate. `ABaseCharacter` creates `UPostProcessComponent (bUnbound=true)` and lerps desaturation/cool tint at low mood. Saved/loaded via `SavedMood` in `UTwoDSurvivalSaveGame`.
 
 ## World Map
 
-Each "map" is a street level. At the end of a street the player can transition to up to 3 adjacent streets (left/right/up). Blocked exits are hidden or greyed out. Streets are loaded/unloaded as the player moves between them.
+Each "map" is a street or building sublevel streamed seamlessly. Exits are now named (`FName ExitID`) — no fixed Left/Right/Up limit.
 
-- [x] **Street data asset** — `UStreetDefinition` (UDataAsset): street name, background/tileset reference, up to 3 exit slots (`EExitDirection`: Left, Right, Up), each exit holds a `TSoftObjectPtr<UStreetDefinition>` to the destination street + optional lock condition.
-- [x] **Exit actor** — `AStreetExit` (C++ AActor + IInteractable): placed at each end of a street, reads its `ExitDirection` and target street from a property set in BP. If target is null or locked → collision blocks passage + no interaction prompt. If valid → prompt "Go [Direction]" → trigger street transition.
-- [x] **Street transition** — `UStreetManager` (UGameInstanceSubsystem): `TransitionToStreet(UStreetDefinition*, EExitDirection)`. Saves player state, opens target level, repositions player at the matching AStreetExit spawn point via one-tick deferred HandleStreetArrival.
-- [x] **Exit direction display** — `UStreetHUDWidget` (C++ UUserWidget): ArrowLeft/ArrowRight/ArrowUp Images shown/collapsed based on which AStreetExit actors have valid TargetStreet assigned.
-- [ ] **World map widget (optional)** — `WBP_WorldMap`: top-down node graph of visited streets, current position highlighted, connections drawn as lines. Toggle with M key.
+- [x] **Street data asset** — `UStreetDefinition` (UDataAsset): `StreetID`, `StreetName`, `StreetWidth`, `TSoftObjectPtr<UWorld> Level`, `TArray<FStreetExitLink> Exits` (each: `ExitID` FName + `Destination` + `EExitLayout`), `bIsPCGBuilding`. `GetExit(FName)` helper.
+- [x] **Exit actor** — `AStreetExit` (C++ AActor, walk-through trigger): `FName ExitID` matches a `FStreetExitLink` in the current street's definition. Player walks through → `SM->OnPlayerCrossedExit(ExitID)`. Logs warning if ExitID is None.
+- [x] **Exit spawn point** — `AExitSpawnPoint` (C++ AActor): `FName SpawnID` placed in sublevels. Manager teleports player here on Building-layout arrivals (SpawnID matches incoming ExitID). Editor-only blue `UArrowComponent`. Fallback to `ABuildingEntrance` if not found.
+- [x] **Street transition** — `UStreetManager`: `OnPlayerCrossedExit(FName)` looks up exit link, loads adjacent (AdjacentRight/Left) or building (Building) level. `OnPlayerExitBuilding()` restores return street. `bTransitionInProgress` guard. `FOnStreetChanged` delegate.
+- [x] **Building entrance** — `ABuildingEntrance` (C++ + IInteractable): `FName BuildingExitID` (street-side) — calls `SM->OnPlayerCrossedExit(BuildingExitID)`. Building-side calls `SM->OnPlayerExitBuilding()`. Prompt reads `bIsInsideBuilding`.
+- [x] **Exit direction display** — `UStreetHUDWidget`: arrows shown for exits named `"Left"`, `"Right"`, `"Up"` by convention. Name exits this way to drive the default HUD arrows.
+- [x] **World map widget** — `UMapWidget` (C++ UUserWidget): BFS node graph from starting street, city-colored region backgrounds, grey street lines, amber highway lines drawn via `NativePaint`. Visited streets tracked in `UStreetManager::VisitedStreetIDs`. Toggle with M key. Blueprint child `WBP_MapWidget` (CanvasPanel "MapCanvas" + Button "CloseButton").
+- [x] **City system** — `UCityDefinition` (UDataAsset): CityID, CityName, MapColor. `UStreetDefinition` extended with `OwnerCity`, `bIsHighway`, `MapLabel`. `UStreetManager` tracks `CurrentCity`, `VisitedStreetIDs`, `StartingStreetDef`; broadcasts `OnCityChanged` on city transition. Map widget groups streets into colored city regions. Blueprint setup: create `DA_City_*` assets, set `OwnerCity` on each `DA_Street_*`, set `bIsHighway=true` on highway streets.
+- [ ] **Blueprint steps — Map** — Create `WBP_MapWidget` (CanvasPanel "MapCanvas" + Button "CloseButton"). Assign `MapWidgetClass` on `BP_BaseCharacter`.
 
 ## NPC Interaction
 
 NPCs with unique roles (drug dealer, father, young girl, etc.) that the player can talk to or give items to in order to get what they need.
 
-- [ ] **NPC data asset** — `UNPCDefinition` (UDataAsset): NPC name, portrait texture, role tag, dialogue lines array (`TArray<FText>`), optional trade: `FNPCTradeOffer` (wants `UItemDefinition* RequiredItem + int32 Count`, gives `UItemDefinition* RewardItem + int32 Count`).
-- [ ] **NPC actor** — `ANPCActor` (C++ AActor + IInteractable): `UNPCDefinition* NPCDef` (EditAnywhere). Instant interaction → opens dialogue widget. Sprite/mesh assigned in Blueprint child.
-- [ ] **Dialogue widget** — `UDialogueWidget` (C++ UUserWidget): portrait on left, NPC name + current dialogue line on right, Next button cycles lines, Close button dismisses. If `NPCDef` has a trade offer, show a "Give Item" button (enabled only if player has the required item).
-- [ ] **Give item flow** — "Give Item" checks `InventoryComponent->CountItemByID(RequiredItemID) >= Count`; if true, calls `RemoveItemByID` + `TryAddItem(RewardItem)` + advances to a "thank you" dialogue line.
-- [ ] **NPC state persistence** — track per-NPC state (trade completed, dialogue stage) by NPC ID in `UTwoDSurvivalSaveGame`. Prevents re-trading after reload.
-- [ ] **Blueprint steps** — Create `WBP_Dialogue` (portrait Image, name Text, dialogue Text, Next/Give/Close buttons). Assign `DialogueWidgetClass` on `BP_BaseCharacter`. Create NPC Blueprint children (e.g. `BP_NPC_DrugDealer`, `BP_NPC_Father`) with mesh + `NPCDef` assigned.
+- [x] **NPC data asset** — `UNPCDefinition` (UDataAsset): NPCID, NPCName, Portrait, DialogueLines, bHasTradeOffer, FNPCTradeOffer (RequiredItem/Count + RewardItem/Count), PostTradeDialogue.
+- [x] **NPC actor** — `ANPCActor` (C++ AActor + IInteractable): NPCDef, bTradeCompleted, OnTradeCompleted (BlueprintAssignable). Instant interaction → opens dialogue widget. OnBoxEndOverlap auto-closes.
+- [x] **Dialogue widget** — `UDialogueWidget` (C++ UUserWidget): PortraitImage, NPCNameText, DialogueText, NextButton cycles lines, GiveItemButton (enabled when player has required items), CloseButton. Portrait set via FSlateBrush + SetResourceObject.
+- [x] **Give item flow** — CountItemByID → RemoveItemByID → TryAddItem reward → NotifyTradeCompleted → switch to PostTradeDialogue lines.
+- [x] **NPC state persistence** — `TSet<FName> CompletedNPCTrades` in `UTwoDSurvivalSaveGame`. Saved via GetAllActorsOfClass scan; restored at LoadGame.
+- [ ] **Blueprint steps** — Create `WBP_DialogueWidget` (PortraitImage, NPCNameText, DialogueText, NextButton, GiveItemButton, GiveItemLabel, CloseButton). Assign `DialogueWidgetClass` on `BP_BaseCharacter`. Create `DA_NPC_*` data assets. Create `BP_NPCActor` children with mesh + NPCDef assigned.
 
 ## House Customization
 

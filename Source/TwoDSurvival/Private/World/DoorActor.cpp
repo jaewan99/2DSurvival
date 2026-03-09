@@ -3,6 +3,7 @@
 #include "World/DoorActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 ADoorActor::ADoorActor()
 {
@@ -46,9 +47,15 @@ FText ADoorActor::GetInteractionPrompt_Implementation()
 
 void ADoorActor::OnInteract_Implementation(ABaseCharacter* Interactor)
 {
-	if (bIsLocked) return;
+	if (bIsLocked)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, SFX_Locked, GetActorLocation());
+		return;
+	}
 	bIsOpen = !bIsOpen;
 	ApplyOpenState();
+	USoundBase* SFX = bIsOpen ? SFX_Open : SFX_Close;
+	UGameplayStatics::PlaySoundAtLocation(this, SFX, GetActorLocation());
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

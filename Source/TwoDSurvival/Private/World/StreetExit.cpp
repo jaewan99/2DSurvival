@@ -13,7 +13,7 @@ AStreetExit::AStreetExit()
 	TriggerBox = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerBox"));
 	SetRootComponent(TriggerBox);
 
-	// Default: thin on X (the crossing axis), tall/wide on Y/Z to cover the corridor.
+	// Default: thin on X (crossing axis), tall/wide on Y/Z to cover the corridor.
 	// Resize in the Blueprint child to fit each street's exit geometry.
 	TriggerBox->SetBoxExtent(FVector(10.f, 200.f, 400.f));
 	TriggerBox->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
@@ -33,11 +33,18 @@ void AStreetExit::OnTriggerOverlap(UPrimitiveComponent* OverlappedComponent, AAc
 	// Only the player triggers a street transition
 	if (!Cast<ABaseCharacter>(OtherActor)) return;
 
+	if (ExitID.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[StreetExit] ExitID is not set on '%s' — assign it in the Details panel."),
+			*GetName());
+		return;
+	}
+
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UStreetManager* SM = GI->GetSubsystem<UStreetManager>())
 		{
-			SM->OnPlayerCrossedExit(Direction);
+			SM->OnPlayerCrossedExit(ExitID);
 		}
 	}
 }

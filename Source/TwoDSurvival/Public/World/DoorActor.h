@@ -9,6 +9,7 @@
 
 class UStaticMeshComponent;
 class UBoxComponent;
+class USoundBase;
 
 /**
  * A door placed between two rooms by ABuildingGenerator.
@@ -43,6 +44,15 @@ public:
 	// When true the door spawns already open.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door")
 	bool bStartOpen = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_Open;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_Close;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_Locked;
 
 	// IInteractable
 	virtual EInteractionType GetInteractionType_Implementation() override;

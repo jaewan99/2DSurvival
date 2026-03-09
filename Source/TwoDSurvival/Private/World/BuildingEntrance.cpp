@@ -32,11 +32,25 @@ FText ABuildingEntrance::GetInteractionPrompt_Implementation()
 
 void ABuildingEntrance::OnInteract_Implementation(ABaseCharacter* Interactor)
 {
-	if (UGameInstance* GI = GetGameInstance())
+	UGameInstance* GI = GetGameInstance();
+	if (!GI) return;
+
+	UStreetManager* SM = GI->GetSubsystem<UStreetManager>();
+	if (!SM) return;
+
+	if (SM->bIsInsideBuilding)
 	{
-		if (UStreetManager* SM = GI->GetSubsystem<UStreetManager>())
+		// Inside the building — exit back to the street.
+		SM->OnPlayerExitBuilding();
+	}
+	else
+	{
+		// On the street — enter the building via the named exit.
+		if (BuildingExitID.IsNone())
 		{
-			SM->OnPlayerCrossedExit(EExitDirection::Up);
+			UE_LOG(LogTemp, Warning, TEXT("[BuildingEntrance] BuildingExitID is not set on '%s'."), *GetName());
+			return;
 		}
+		SM->OnPlayerCrossedExit(BuildingExitID);
 	}
 }

@@ -12,18 +12,22 @@ class ULevelStreamingDynamic;
 // Fired when the active street/building changes — UStreetHUDWidget binds this to refresh arrows.
 DECLARE_MULTICAST_DELEGATE(FOnStreetChanged);
 
+// Fired when the player moves into a different city (or onto a highway / back into a city).
+DECLARE_MULTICAST_DELEGATE(FOnCityChanged);
+
 /**
  * Lives on the GameInstance — persists for the lifetime of the game session.
  *
- * Manages seamless level streaming for street navigation and building entry/exit:
- *   - Loads the starting street at game start (called by AStreetBootstrapper)
- *   - Left/Right exits: loads the adjacent street, unloads the old one
- *   - Up exit (building entrance): saves return state, loads the building sublevel at
- *     X=100000 (far from the street grid), injects PCG parameters, teleports the player
- *     inside. Pressing Up again (ABuildingEntrance inside building) exits back to the street.
+ * Manages seamless level streaming for street navigation and building entry/exit.
  *
- * Streets are placed at world X offsets (Street A at X=0, Street B at X=StreetA.Width, …).
- * Buildings are always placed at X=BuildingWorldX to avoid overlapping the street grid.
+ * Exits are now named (FName ExitID) rather than fixed Left/Right/Up.
+ * Each UStreetDefinition has a TArray<FStreetExitLink> Exits; each link specifies
+ * where it leads and how the destination level is positioned (AdjacentRight/Left/Building).
+ *
+ * Walk-through exits (AdjacentRight/Left): destination level is placed next to the current one;
+ *   player walks across naturally — no teleport.
+ * Building exits: destination is loaded at a far-off X (BuildingWorldX); player is teleported
+ *   to an AExitSpawnPoint whose SpawnID matches the ExitID used to enter.
  */
 UCLASS()
 class TWODSURVIVAL_API UStreetManager : public UGameInstanceSubsystem
@@ -31,32 +35,62 @@ class TWODSURVIVAL_API UStreetManager : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	// Called by AStreetBootstrapper in BeginPlay to load the initial street.
+	/** Called by AStreetBootstrapper in BeginPlay to load the initial street. */
 	void InitializeWithStreet(UStreetDefinition* StartStreet, FVector WorldOffset = FVector::ZeroVector);
 
-	// Called by AStreetExit (Left/Right) or ABuildingEntrance (Up).
-	// Up toggles between entering and exiting a building based on bIsInsideBuilding.
-	void OnPlayerCrossedExit(EExitDirection Direction);
+	/**
+	 * Called by AStreetExit (walk-through) or ABuildingEntrance (press-E, street side).
+	 * ExitID must match a FStreetExitLink::ExitID on CurrentStreet.
+	 */
+	void OnPlayerCrossedExit(FName ExitID);
 
-	// Fired after any street/building transition completes.
+	/**
+	 * Called by ABuildingEntrance (press-E, building side).
+	 * Exits the current building and restores the street the player came from.
+	 */
+	void OnPlayerExitBuilding();
+
+	/** Fired after any street/building transition completes. */
 	FOnStreetChanged OnStreetChanged;
 
-	// The street (or building definition) the player is currently in.
+	/** Fired when the player enters or leaves a city (including going onto a highway). */
+	FOnCityChanged OnCityChanged;
+
+	/** The city the player is currently in. Null while on a highway or wilderness street. */
+	UPROPERTY(BlueprintReadOnly, Category = "City")
+	TObjectPtr<UCityDefinition> CurrentCity;
+
+	/** Streets the player has visited this session (+ restored from save). */
+	UPROPERTY(BlueprintReadOnly, Category = "Map")
+	TSet<FName> VisitedStreetIDs;
+
+	const TSet<FName>& GetVisitedStreets() const { return VisitedStreetIDs; }
+
+	/** Called by LoadGame to restore visited streets from save data. */
+	void RestoreVisitedStreets(const TSet<FName>& Saved) { VisitedStreetIDs = Saved; }
+
+	/** The street the session started on (used as BFS root for map layout). */
+	UFUNCTION(BlueprintCallable, Category = "Map")
+	UStreetDefinition* GetStartingStreet() const { return StartingStreetDef; }
+
+	/** The street or building definition the player is currently in. */
 	UPROPERTY(BlueprintReadOnly, Category = "Street")
 	TObjectPtr<UStreetDefinition> CurrentStreet;
 
-	// World-space origin of the currently active sublevel.
+	/** World-space origin of the currently active sublevel. */
 	UPROPERTY(BlueprintReadOnly, Category = "Street")
 	FVector CurrentStreetWorldOffset = FVector::ZeroVector;
 
-	// True while the player is inside a building sublevel (not on a street).
-	// ABuildingEntrance reads this to choose the correct interaction prompt.
+	/** True while the player is inside a building sublevel (not on a street). */
 	UPROPERTY(BlueprintReadOnly, Category = "Building")
 	bool bIsInsideBuilding = false;
 
 private:
 	// Building sublevels are placed at this fixed X offset, clear of the street grid.
 	static constexpr float BuildingWorldX = 100000.f;
+
+	UPROPERTY()
+	TObjectPtr<UStreetDefinition> StartingStreetDef;
 
 	// ── Streaming handles ─────────────────────────────────────────────────────
 	UPROPERTY()
@@ -74,13 +108,14 @@ private:
 	bool bTransitionInProgress = false;
 
 	// ── Building return state ──────────────────────────────────────────────────
-	// Saved when the player enters a building; restored on exit.
 	TObjectPtr<UStreetDefinition> ReturnStreet;
-	FVector ReturnStreetOffset    = FVector::ZeroVector;
-	FVector ReturnPlayerLocation  = FVector::ZeroVector;
+	FVector ReturnStreetOffset   = FVector::ZeroVector;
+	FVector ReturnPlayerLocation = FVector::ZeroVector;
+
+	// The ExitID used to enter the building — matched against AExitSpawnPoint::SpawnID on load.
+	FName PendingIncomingExitID = NAME_None;
 
 	// ── Transition type ────────────────────────────────────────────────────────
-	// Determines what OnNewStreetShown does after the load completes.
 	enum class ETransitionType : uint8 { Street, EnterBuilding, ExitBuilding };
 	ETransitionType PendingTransitionType = ETransitionType::Street;
 
@@ -92,10 +127,13 @@ private:
 	void OnNewStreetShown();
 
 	// Computes where to place an adjacent Left/Right street in world space.
-	FVector ComputeAdjacentOffset(EExitDirection Direction, UStreetDefinition* AdjacentStreet) const;
+	FVector ComputeAdjacentOffset(EExitLayout Layout, UStreetDefinition* AdjacentStreet) const;
 
-	// Teleports the player pawn to the first ABuildingEntrance found in Level.
-	void TeleportPlayerToBuildingEntrance(ULevel* Level);
+	/**
+	 * Scans Level for an AExitSpawnPoint whose SpawnID matches IncomingExitID and teleports the player there.
+	 * Falls back to ABuildingEntrance if no matching spawn point is found (backward compatibility).
+	 */
+	void TeleportPlayerToSpawnPoint(ULevel* Level, FName IncomingExitID);
 
 	// Teleports the player pawn to an explicit world location.
 	void TeleportPlayerToLocation(FVector Location);

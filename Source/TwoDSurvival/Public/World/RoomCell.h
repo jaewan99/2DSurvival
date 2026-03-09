@@ -12,17 +12,17 @@ class UStaticMeshComponent;
 /**
  * C++ base class for all room cell Blueprint actors.
  *
- * Creates five mesh components out of the box — assign Static Meshes in the
- * Blueprint Details panel. Leave any component's mesh empty to hide that surface.
+ * Provides Floor and Ceiling mesh components that are repositioned at runtime
+ * by ABuildingGenerator. All wall meshes (left, right, back) are intentionally
+ * omitted — place them directly in the Blueprint child using the viewport.
  *
  * ABuildingGenerator calls SetRoomDimensions() immediately after spawn so the
- * walls / floor / ceiling are positioned correctly for the building's grid.
- * It then calls ApplyRoomDefinition() to apply wall and floor materials.
+ * floor and ceiling are positioned correctly for the building's grid.
  *
  * Blueprint child (BP_RoomCell):
- *   - Assign Static Meshes to Floor, Ceiling, LeftWall, RightWall, BackWall.
- *   - Override ApplyRoomDefinition only if you need custom material logic beyond
- *     the defaults (C++ base already handles WallMaterial and FloorMaterial).
+ *   - Assign Static Meshes to Floor and Ceiling in the Details panel.
+ *   - Add wall meshes directly in the Blueprint viewport as needed.
+ *   - Override ApplyRoomDefinition only for custom material logic.
  */
 UCLASS()
 class TWODSURVIVAL_API ARoomCell : public AActor
@@ -32,33 +32,21 @@ class TWODSURVIVAL_API ARoomCell : public AActor
 public:
 	ARoomCell();
 
-	// ── Wall / surface meshes ─────────────────────────────────────────────────
-	// Assign Static Meshes in the Blueprint Details panel. Any left empty is invisible.
+	// ── Surface meshes ────────────────────────────────────────────────────────
+	// Assign Static Meshes in the Blueprint Details panel. Leave empty to hide.
 
-	// The floor surface the player walks on.
+	/** The floor surface the player walks on. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Room|Meshes")
 	TObjectPtr<UStaticMeshComponent> Floor;
 
-	// The ceiling surface above the player.
+	/** The ceiling surface above the player. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Room|Meshes")
 	TObjectPtr<UStaticMeshComponent> Ceiling;
-
-	// Left boundary wall (at X = 0 relative to room origin).
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Room|Meshes")
-	TObjectPtr<UStaticMeshComponent> LeftWall;
-
-	// Right boundary wall (at X = RoomWidth relative to room origin).
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Room|Meshes")
-	TObjectPtr<UStaticMeshComponent> RightWall;
-
-	// Background wall visible behind the characters (depth / backdrop).
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Room|Meshes")
-	TObjectPtr<UStaticMeshComponent> BackWall;
 
 	// ── Called by ABuildingGenerator ─────────────────────────────────────────
 
 	/**
-	 * Repositions all wall/floor/ceiling components to match the building grid.
+	 * Repositions Floor and Ceiling to match the building grid.
 	 * Called by ABuildingGenerator immediately after this actor is spawned.
 	 * Width  = UBuildingDefinition::RoomWidth
 	 * Height = UBuildingDefinition::FloorHeight
@@ -67,9 +55,8 @@ public:
 	void SetRoomDimensions(float Width, float Height);
 
 	/**
-	 * Applies WallMaterial (LeftWall, RightWall, BackWall) and FloorMaterial (Floor)
-	 * from the given definition. The C++ base already does this — override in Blueprint
-	 * only for custom material logic (e.g. setting additional material parameters).
+	 * Called by ABuildingGenerator to apply archetype-specific overrides.
+	 * The C++ base is a no-op — override in Blueprint for custom material logic.
 	 */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Room")
 	void ApplyRoomDefinition(URoomDefinition* Definition);

@@ -2,13 +2,11 @@
 
 #include "World/StreetDefinition.h"
 
-UStreetDefinition* UStreetDefinition::GetExit(EExitDirection Direction) const
+const FStreetExitLink* UStreetDefinition::GetExit(FName ExitID) const
 {
-	switch (Direction)
+	for (const FStreetExitLink& Link : Exits)
 	{
-	case EExitDirection::Left:  return ExitLeft;
-	case EExitDirection::Right: return ExitRight;
-	case EExitDirection::Up:    return ExitUp;
-	default:                    return nullptr;
+		if (Link.ExitID == ExitID) return &Link;
 	}
+	return nullptr;
 }

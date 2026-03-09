@@ -2,6 +2,7 @@
 
 #include "UI/CraftingWidget.h"
 #include "UI/CraftingRecipeEntry.h"
+#include "Kismet/GameplayStatics.h"
 #include "Crafting/CraftingComponent.h"
 #include "Crafting/CraftingRecipe.h"
 #include "Inventory/InventoryComponent.h"
@@ -172,6 +173,8 @@ void UCraftingWidget::OnCraftClicked()
 
 	if (CraftStatusText)
 		CraftStatusText->SetText(FText::FromString(bSuccess ? TEXT("Crafted!") : TEXT("Cannot craft")));
+
+	UGameplayStatics::PlaySound2D(this, bSuccess ? SFX_CraftSuccess : SFX_CraftFail);
 
 	if (bSuccess)
 	{

@@ -27,9 +27,11 @@ void UStreetHUDWidget::RefreshArrows()
 {
 	UStreetManager* SM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UStreetManager>() : nullptr;
 
-	const bool bHasLeft  = SM && SM->CurrentStreet && SM->CurrentStreet->ExitLeft  != nullptr;
-	const bool bHasRight = SM && SM->CurrentStreet && SM->CurrentStreet->ExitRight != nullptr;
-	const bool bHasUp    = SM && SM->CurrentStreet && SM->CurrentStreet->ExitUp    != nullptr;
+	// Arrows show when exits with conventional IDs "Left", "Right", "Up" exist and have a destination.
+	// Name your exits "Left", "Right", "Up" in DA_Street_* to have them drive these arrows.
+	const bool bHasLeft  = SM && SM->CurrentStreet && SM->CurrentStreet->GetExit(FName("Left"))  != nullptr && SM->CurrentStreet->GetExit(FName("Left"))->Destination  != nullptr;
+	const bool bHasRight = SM && SM->CurrentStreet && SM->CurrentStreet->GetExit(FName("Right")) != nullptr && SM->CurrentStreet->GetExit(FName("Right"))->Destination != nullptr;
+	const bool bHasUp    = SM && SM->CurrentStreet && SM->CurrentStreet->GetExit(FName("Up"))    != nullptr && SM->CurrentStreet->GetExit(FName("Up"))->Destination    != nullptr;
 
 	if (ArrowLeft)  ArrowLeft->SetVisibility(bHasLeft  ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (ArrowRight) ArrowRight->SetVisibility(bHasRight ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);

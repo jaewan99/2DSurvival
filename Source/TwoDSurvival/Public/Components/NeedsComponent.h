@@ -19,6 +19,8 @@ enum class ENeedType : uint8
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnNeedChanged,
 	ENeedType, NeedType, float, CurrentValue, float, MaxValue, bool, bIsWarning);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMoodChanged, float, NewMood);
+
 /**
  * Tick-driven component that drains Hunger, Thirst, and Fatigue over time.
  * At 0 each need causes HP drain. Low values apply speed and damage penalties.
@@ -35,6 +37,30 @@ public:
 	/** Broadcast whenever any need value changes. */
 	UPROPERTY(BlueprintAssignable, Category = "Needs")
 	FOnNeedChanged OnNeedChanged;
+
+	/** Broadcast whenever the Mood value changes. */
+	UPROPERTY(BlueprintAssignable, Category = "Needs")
+	FOnMoodChanged OnMoodChanged;
+
+	/** Very slow passive Mood drain (~208 min to empty at 1x). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Needs|Mood")
+	float MoodPassiveDrainRate = 0.008f;
+
+	/** Extra Mood drain per depleted (0) need. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Needs|Mood")
+	float CriticalMoodDrainRate = 0.04f;
+
+	/** Adjust Mood by Delta (clamped 0–100) and broadcast OnMoodChanged. */
+	UFUNCTION(BlueprintCallable, Category = "Needs")
+	void ModifyMood(float Delta);
+
+	/** Returns current Mood (0–100). */
+	UFUNCTION(BlueprintCallable, Category = "Needs")
+	float GetMood() const;
+
+	/** Directly set Mood value — used by the save/load system. */
+	UFUNCTION(BlueprintCallable, Category = "Needs")
+	void SetMood(float Value);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Needs|Drain")
 	float HungerDrainRate = 0.055f;   // ~30 min to fully deplete
@@ -109,6 +135,7 @@ private:
 	float Hunger  = 100.f;
 	float Thirst  = 100.f;
 	float Fatigue = 100.f;
+	float Mood    = 100.f;
 
 	bool bIsActiveMovement = false;
 

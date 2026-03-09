@@ -6,6 +6,8 @@
 #include "Inventory/ItemDefinition.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/NeedsComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 AWorldItem::AWorldItem()
 {
@@ -69,6 +71,9 @@ void AWorldItem::OnInteract_Implementation(ABaseCharacter* Interactor)
 
 	if (Inv->TryAddItem(ItemDef, Quantity))
 	{
+		if (Interactor->NeedsComponent)
+			Interactor->NeedsComponent->ModifyMood(3.f);
+		UGameplayStatics::PlaySoundAtLocation(this, SFX_Pickup, GetActorLocation());
 		Destroy();
 	}
 }

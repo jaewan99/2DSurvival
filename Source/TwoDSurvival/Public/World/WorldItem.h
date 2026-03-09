@@ -10,6 +10,7 @@
 class UItemDefinition;
 class UStaticMeshComponent;
 class UBoxComponent;
+class USoundBase;
 
 /**
  * A physical item dropped in the world (e.g. enemy loot).
@@ -41,6 +42,9 @@ public:
 	// Number of items this pickup contains.
 	UPROPERTY(BlueprintReadWrite, Category = "Item")
 	int32 Quantity = 1;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_Pickup;
 
 protected:
 	virtual void BeginPlay() override;

@@ -24,10 +24,16 @@
 #include "UI/CraftingWidget.h"
 #include "UI/NeedsWarningWidget.h"
 #include "UI/StreetHUDWidget.h"
+#include "UI/DialogueWidget.h"
+#include "World/NPCActor.h"
+#include "World/NPCDefinition.h"
 #include "Crafting/CraftingComponent.h"
 #include "World/TimeManager.h"
 #include "World/DraggableProp.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/PostProcessComponent.h"
+#include "UI/MapWidget.h"
+#include "World/StreetManager.h"
 // DamageableInterface included via BaseCharacter.h
 
 ABaseCharacter::ABaseCharacter()
@@ -75,6 +81,14 @@ ABaseCharacter::ABaseCharacter()
 	// Needs component — tracks Hunger, Thirst, Fatigue over time
 	NeedsComponent = CreateDefaultSubobject<UNeedsComponent>(TEXT("NeedsComponent"));
 
+	// Post-process component for mood-driven visual effects (desaturation/color shift)
+	MoodPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("MoodPostProcess"));
+	MoodPostProcess->SetupAttachment(SpringArm);
+	MoodPostProcess->bUnbound = true;
+	MoodPostProcess->Priority = 2.f;
+	MoodPostProcess->Settings.bOverride_ColorSaturation = true;
+	MoodPostProcess->Settings.bOverride_ColorGain = true;
+
 	// Don't auto-rotate toward movement direction — MoveRight handles rotation
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 
@@ -106,8 +120,9 @@ void ABaseCharacter::CreateInputActions()
 	IA_LoadGameAction = MakeAction(TEXT("IA_LoadGame"));
 	IA_Attack = MakeAction(TEXT("IA_Attack"));
 
-	// Create mapping context and bind keys
+	UInputAction* IA_Map = MakeAction(TEXT("IA_ToggleMap"));
 	GameplayIMC = NewObject<UInputMappingContext>(this, TEXT("GameplayIMC"));
+	IA_ToggleMap = IA_Map;
 
 	GameplayIMC->MapKey(IA_HotbarSlot1, EKeys::One);
 	GameplayIMC->MapKey(IA_HotbarSlot2, EKeys::Two);
@@ -120,6 +135,7 @@ void ABaseCharacter::CreateInputActions()
 	GameplayIMC->MapKey(IA_SaveGameAction, EKeys::F5);
 	GameplayIMC->MapKey(IA_LoadGameAction, EKeys::F9);
 	GameplayIMC->MapKey(IA_Attack, EKeys::LeftMouseButton);
+	GameplayIMC->MapKey(IA_ToggleMap, EKeys::M);
 }
 
 void ABaseCharacter::ScanItemDefinitions()
@@ -157,6 +173,14 @@ void ABaseCharacter::BeginPlay()
 
 	// Bind needs delegate — recalculates movement speed whenever any need changes
 	NeedsComponent->OnNeedChanged.AddDynamic(this, &ABaseCharacter::OnNeedChanged);
+
+	// Bind mood delegate — applies post-process visual effect
+	if (NeedsComponent)
+		NeedsComponent->OnMoodChanged.AddDynamic(this, &ABaseCharacter::OnMoodChanged);
+
+	// Bind crafting success — boost mood on craft
+	if (CraftingComponent)
+		CraftingComponent->OnCraftingChanged.AddDynamic(this, &ABaseCharacter::OnCraftSucceeded);
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
@@ -321,6 +345,10 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 		// Attack (LMB)
 		EIC->BindAction(IA_Attack, ETriggerEvent::Started, this, &ABaseCharacter::OnAttackPressed);
+
+		// Map (M)
+		if (IA_ToggleMap)
+			EIC->BindAction(IA_ToggleMap, ETriggerEvent::Started, this, &ABaseCharacter::ToggleMap);
 	}
 }
 
@@ -332,6 +360,14 @@ void ABaseCharacter::ShowUICursor()
 void ABaseCharacter::HideUICursor()
 {
 	UIOpenCount = FMath::Max(0, UIOpenCount - 1);
+}
+
+void ABaseCharacter::PlayUISound(USoundBase* Sound)
+{
+	if (Sound)
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
+	}
 }
 
 void ABaseCharacter::RegisterTooltip(UUserWidget* Tooltip)
@@ -350,6 +386,7 @@ void ABaseCharacter::ClearTooltip()
 
 void ABaseCharacter::ToggleHealthUI_Implementation()
 {
+	PlayUISound(SFX_HealthHUDToggle);
 	if (HealthHUDInstance)
 	{
 		HealthHUDInstance->RemoveFromParent();
@@ -377,6 +414,7 @@ void ABaseCharacter::ToggleCrafting_Implementation()
 {
 	if (CraftingWidgetInstance)
 	{
+		PlayUISound(SFX_CraftClose);
 		CraftingWidgetInstance->RemoveFromParent();
 		CraftingWidgetInstance = nullptr;
 		HideUICursor();
@@ -391,6 +429,7 @@ void ABaseCharacter::ToggleCrafting_Implementation()
 		{
 			CraftingWidgetInstance->AddToViewport(5);
 			ShowUICursor();
+			PlayUISound(SFX_CraftOpen);
 		}
 	}
 }
@@ -399,8 +438,39 @@ void ABaseCharacter::CloseCrafting_Implementation()
 {
 	if (!CraftingWidgetInstance) return;
 
+	PlayUISound(SFX_CraftClose);
 	CraftingWidgetInstance->RemoveFromParent();
 	CraftingWidgetInstance = nullptr;
+	HideUICursor();
+}
+
+void ABaseCharacter::OpenDialogue_Implementation(ANPCActor* NPC)
+{
+	// Close any existing dialogue first (e.g. player switched NPC quickly).
+	CloseDialogue();
+
+	if (!NPC || !DialogueWidgetClass) return;
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+
+	DialogueWidgetInstance = CreateWidget<UDialogueWidget>(PC, DialogueWidgetClass);
+	if (DialogueWidgetInstance)
+	{
+		DialogueWidgetInstance->SetNPC(NPC, this);
+		DialogueWidgetInstance->AddToViewport(10);
+		ShowUICursor();
+		PlayUISound(SFX_DialogueOpen);
+	}
+}
+
+void ABaseCharacter::CloseDialogue_Implementation()
+{
+	if (!DialogueWidgetInstance) return;
+
+	PlayUISound(SFX_DialogueClose);
+	DialogueWidgetInstance->RemoveFromParent();
+	DialogueWidgetInstance = nullptr;
 	HideUICursor();
 }
 
@@ -473,6 +543,7 @@ void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent
 		if (Slot.ItemDef->HungerRestore  > 0.f) NeedsComponent->RestoreNeed(ENeedType::Hunger,  Slot.ItemDef->HungerRestore);
 		if (Slot.ItemDef->ThirstRestore  > 0.f) NeedsComponent->RestoreNeed(ENeedType::Thirst,  Slot.ItemDef->ThirstRestore);
 		if (Slot.ItemDef->FatigueRestore > 0.f) NeedsComponent->RestoreNeed(ENeedType::Fatigue, Slot.ItemDef->FatigueRestore);
+		if (Slot.ItemDef->MoodRestore > 0.f) NeedsComponent->ModifyMood(Slot.ItemDef->MoodRestore);
 	}
 
 	FromInventory->RemoveItem(SlotIndex, 1);
@@ -608,6 +679,24 @@ void ABaseCharacter::SaveGame_Implementation()
 	SaveObj->SavedHunger  = NeedsComponent->GetNeedValue(ENeedType::Hunger);
 	SaveObj->SavedThirst  = NeedsComponent->GetNeedValue(ENeedType::Thirst);
 	SaveObj->SavedFatigue = NeedsComponent->GetNeedValue(ENeedType::Fatigue);
+	SaveObj->SavedMood    = NeedsComponent->GetMood();
+
+	// Visited streets
+	UStreetManager* SM = GetWorld()->GetGameInstance()->GetSubsystem<UStreetManager>();
+	if (SM) SaveObj->VisitedStreetIDs = SM->GetVisitedStreets();
+
+	// NPC trades — collect completed trade IDs from all NPC actors in the world.
+	SaveObj->CompletedNPCTrades.Empty();
+	TArray<AActor*> AllNPCs;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ANPCActor::StaticClass(), AllNPCs);
+	for (AActor* A : AllNPCs)
+	{
+		ANPCActor* NPC = Cast<ANPCActor>(A);
+		if (NPC && NPC->bTradeCompleted && NPC->NPCDef && !NPC->NPCDef->NPCID.IsNone())
+		{
+			SaveObj->CompletedNPCTrades.Add(NPC->NPCDef->NPCID);
+		}
+	}
 
 	UGameplayStatics::SaveGameToSlot(SaveObj, SaveSlotName, SaveUserIndex);
 	UE_LOG(LogTemp, Log, TEXT("Game saved to slot: %s"), *SaveSlotName);
@@ -709,6 +798,23 @@ void ABaseCharacter::LoadGame_Implementation()
 	NeedsComponent->SetNeedValue(ENeedType::Hunger,  SaveObj->SavedHunger);
 	NeedsComponent->SetNeedValue(ENeedType::Thirst,  SaveObj->SavedThirst);
 	NeedsComponent->SetNeedValue(ENeedType::Fatigue, SaveObj->SavedFatigue);
+	NeedsComponent->SetMood(SaveObj->SavedMood);
+
+	// Restore visited streets
+	UStreetManager* SM = GetWorld()->GetGameInstance()->GetSubsystem<UStreetManager>();
+	if (SM) SM->RestoreVisitedStreets(SaveObj->VisitedStreetIDs);
+
+	// Restore NPC trade states.
+	TArray<AActor*> AllNPCs;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ANPCActor::StaticClass(), AllNPCs);
+	for (AActor* A : AllNPCs)
+	{
+		ANPCActor* NPC = Cast<ANPCActor>(A);
+		if (NPC && NPC->NPCDef && !NPC->NPCDef->NPCID.IsNone())
+		{
+			NPC->bTradeCompleted = SaveObj->CompletedNPCTrades.Contains(NPC->NPCDef->NPCID);
+		}
+	}
 
 	// Recalculate movement speed accounting for leg damage and needs
 	RecalculateMovementSpeed();
@@ -794,6 +900,8 @@ void ABaseCharacter::TakeMeleeDamage_Implementation(float Amount, AActor* Damage
 	// Apply damage to the Body by default. Enemies that want per-part hits
 	// can call HealthComponent->ApplyDamage directly with a specific EBodyPart.
 	HealthComponent->ApplyDamage(EBodyPart::Body, Amount);
+
+	if (NeedsComponent) NeedsComponent->ModifyMood(-5.f);
 
 	UE_LOG(LogTemp, Log, TEXT("BaseCharacter took %.1f melee damage from %s"),
 		Amount, DamageSource ? *DamageSource->GetName() : TEXT("Unknown"));
@@ -942,6 +1050,7 @@ void ABaseCharacter::PerformUnarmedHit()
 void ABaseCharacter::OnInteractStarted()
 {
 	if (bIsAttacking) return;
+	PlayUISound(SFX_Interact);
 	InteractionComponent->StartInteract();
 }
 
@@ -950,6 +1059,51 @@ void ABaseCharacter::OnInteractCompleted()
 	// Always forward release so a hold-interaction that was started before an attack
 	// doesn't get stuck with its timer running.
 	InteractionComponent->StopInteract();
+}
+
+void ABaseCharacter::OnMoodChanged(float NewMood)
+{
+	if (!MoodPostProcess) return;
+	const float T = FMath::Clamp(NewMood / 100.f, 0.f, 1.f);
+	// Mood 0: desaturated cold-dark. Mood 100: normal.
+	const FVector4 LowSat(0.65f, 0.65f, 0.75f, 1.f);
+	const FVector4 HighSat(1.f, 1.f, 1.f, 1.f);
+	const FVector4 LowGain(0.80f, 0.82f, 0.90f, 1.f);
+	const FVector4 HighGain(1.f, 1.f, 1.f, 1.f);
+	MoodPostProcess->Settings.ColorSaturation = FVector4(
+		FMath::Lerp(LowSat.X, HighSat.X, T),
+		FMath::Lerp(LowSat.Y, HighSat.Y, T),
+		FMath::Lerp(LowSat.Z, HighSat.Z, T), 1.f);
+	MoodPostProcess->Settings.ColorGain = FVector4(
+		FMath::Lerp(LowGain.X, HighGain.X, T),
+		FMath::Lerp(LowGain.Y, HighGain.Y, T),
+		FMath::Lerp(LowGain.Z, HighGain.Z, T), 1.f);
+}
+
+void ABaseCharacter::OnCraftSucceeded()
+{
+	if (NeedsComponent) NeedsComponent->ModifyMood(5.f);
+}
+
+void ABaseCharacter::ToggleMap()
+{
+	if (MapWidgetInstance)
+	{
+		MapWidgetInstance->RemoveFromParent();
+		MapWidgetInstance = nullptr;
+		HideUICursor();
+	}
+	else if (MapWidgetClass)
+	{
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!PC) return;
+		MapWidgetInstance = CreateWidget<UMapWidget>(PC, MapWidgetClass);
+		if (MapWidgetInstance)
+		{
+			MapWidgetInstance->AddToViewport(8);
+			ShowUICursor();
+		}
+	}
 }
 
 void ABaseCharacter::MoveRight(float Value)

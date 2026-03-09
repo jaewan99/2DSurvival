@@ -25,6 +25,11 @@ class UCraftingComponent;
 class UCraftingWidget;
 class UNeedsWarningWidget;
 class UStreetHUDWidget;
+class UDialogueWidget;
+class ANPCActor;
+class USoundBase;
+class UPostProcessComponent;
+class UMapWidget;
 
 enum class EBodyPart : uint8;
 
@@ -59,6 +64,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Needs")
 	UNeedsComponent* NeedsComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mood")
+	UPostProcessComponent* MoodPostProcess;
 
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -296,6 +304,49 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Needs")
 	float SleepTimeScale = 20.f;
 
+	// ── Sound effects ──────────────────────────────────────────────────────────
+	// Assign Sound Wave / Sound Cue assets in BP_BaseCharacter Details panel.
+
+	/** Played when any interactable (E key press) interaction begins. */
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_Interact;
+
+	/** Played when the inventory is opened. Called from Blueprint's ToggleInventory override. */
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_InventoryOpen;
+
+	/** Played when the inventory is closed. Called from Blueprint's ToggleInventory override. */
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_InventoryClose;
+
+	/** Played when the crafting UI opens. */
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_CraftOpen;
+
+	/** Played when the crafting UI closes. */
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_CraftClose;
+
+	/** Played when the dialogue widget opens. */
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_DialogueOpen;
+
+	/** Played when the dialogue widget closes. */
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_DialogueClose;
+
+	/** Played when the Health HUD is toggled. */
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> SFX_HealthHUDToggle;
+
+	/**
+	 * Plays a 2D (non-positional) UI sound. Safe to call with null (no-op).
+	 * Call this from Blueprint's ToggleInventory override to play SFX_InventoryOpen/Close.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Sound")
+	void PlayUISound(USoundBase* Sound);
+
+	// ── Save ───────────────────────────────────────────────────────────────────
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save")
 	FString SaveSlotName = TEXT("SaveSlot0");
 
@@ -328,6 +379,30 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UStreetHUDWidget> StreetHUDWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UDialogueWidget> DialogueWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UMapWidget> MapWidgetClass;
+
+	void ToggleMap();
+
+	/**
+	 * Opens the dialogue widget for the given NPC.
+	 * Called by ANPCActor::OnInteract when the player presses E.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Dialogue")
+	void OpenDialogue(ANPCActor* NPC);
+	virtual void OpenDialogue_Implementation(ANPCActor* NPC);
+
+	/**
+	 * Closes the dialogue widget if open. Called when player walks away or presses Close.
+	 * Safe to call when already closed.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Dialogue")
+	void CloseDialogue();
+	virtual void CloseDialogue_Implementation();
+
 private:
 	// Maps ItemID → ItemDefinition for fast lookup during load. Built in BeginPlay via AssetRegistry scan.
 	UPROPERTY()
@@ -357,6 +432,7 @@ private:
 	UPROPERTY() UInputAction* IA_SaveGameAction;
 	UPROPERTY() UInputAction* IA_LoadGameAction;
 	UPROPERTY() UInputAction* IA_Attack;
+	UPROPERTY() UInputAction* IA_ToggleMap;
 	UPROPERTY() UInputMappingContext* GameplayIMC;
 
 	/** Creates all programmatic input actions and mapping context at runtime. */
@@ -394,6 +470,14 @@ private:
 	UFUNCTION()
 	void OnNeedChanged(ENeedType NeedType, float CurrentValue, float MaxValue, bool bIsWarning);
 
+	// Bound to NeedsComponent->OnMoodChanged — applies post-process desaturation effect.
+	UFUNCTION()
+	void OnMoodChanged(float NewMood);
+
+	// Bound to CraftingComponent->OnCraftingChanged — boosts mood on successful craft.
+	UFUNCTION()
+	void OnCraftSucceeded();
+
 	// Widget instances
 	UPROPERTY()
 	UHealthHUDWidget* HealthHUDInstance;
@@ -409,6 +493,12 @@ private:
 
 	UPROPERTY()
 	UStreetHUDWidget* StreetHUDInstance;
+
+	UPROPERTY()
+	UDialogueWidget* DialogueWidgetInstance;
+
+	UPROPERTY()
+	UMapWidget* MapWidgetInstance;
 
 	/** Scans all UItemDefinition assets via AssetRegistry and builds ItemDefMap. */
 	void ScanItemDefinitions();

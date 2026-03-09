@@ -4,23 +4,24 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "World/StreetDefinition.h"
 #include "StreetExit.generated.h"
 
 class UBoxComponent;
 
 /**
- * Placed at the Left or Right boundary of a street sublevel.
- * When the player walks through the trigger box, UStreetManager streams in the adjacent street
- * and unloads the current one — no E-press required.
+ * Walk-through trigger placed inside a street sublevel.
+ * When the player enters the TriggerBox, UStreetManager streams in the adjacent level
+ * defined by the FStreetExitLink whose ExitID matches this actor's ExitID.
  *
  * Blueprint child (BP_StreetExit):
- *   - Set Direction in Details (Left or Right)
+ *   - Set ExitID to match the exit in DA_Street_* (e.g. "Left", "Right", "BackAlley")
  *   - Resize TriggerBox to cover the full height of the exit corridor
- *   - Optionally add a mesh (e.g. street-end barrier) as a visual marker
+ *   - Optionally add a mesh as a visual marker
  *
- * Up exits are NOT handled here — use a separate interactable actor (door/ladder).
- * Exit connectivity is defined on UStreetDefinition (ExitLeft/ExitRight), not here.
+ * Placement tip: put the trigger 200–400 units INSIDE the current street's end so
+ * the next level has time to load before the player physically crosses into it.
+ *
+ * For press-E building entrances, use ABuildingEntrance instead.
  */
 UCLASS()
 class TWODSURVIVAL_API AStreetExit : public AActor
@@ -33,9 +34,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBoxComponent> TriggerBox;
 
-	// Which boundary of this street this actor represents.
+	/**
+	 * Must match a FStreetExitLink::ExitID on the current street's UStreetDefinition.
+	 * e.g. "Left", "Right", "BackAlley", "RoofHatch" — any name is valid.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Street")
-	EExitDirection Direction = EExitDirection::Right;
+	FName ExitID = NAME_None;
 
 protected:
 	virtual void BeginPlay() override;
