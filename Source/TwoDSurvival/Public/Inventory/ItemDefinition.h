@@ -6,6 +6,7 @@
 #include "Engine/DataAsset.h"
 #include "Inventory/InventoryTypes.h"
 #include "Weapon/WeaponBase.h"
+#include "Combat/StatusEffectTypes.h"
 #include "ItemDefinition.generated.h"
 
 class AFlashlightActor;
@@ -62,6 +63,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable",
 		meta = (EditCondition = "ItemCategory == EItemCategory::Consumable"))
 	float BatteryRestoreAmount = 0.f;
+
+	/**
+	 * Status effects cured when this item is consumed.
+	 * E.g. Bandage = {Bleeding}, Antibiotics = {Infected}, Antidote = {Poisoned},
+	 * Splint = {BrokenBone}, Hot Soup = {Frostbite, Hypothermia, Wet}, Painkillers = {Concussion}.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable",
+		meta = (EditCondition = "ItemCategory == EItemCategory::Consumable"))
+	TArray<EStatusEffect> StatusEffectCures;
 
 	// If true, this item can be placed in the hotbar.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")

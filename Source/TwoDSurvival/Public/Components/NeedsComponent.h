@@ -104,6 +104,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Needs")
 	void RestoreNeed(ENeedType NeedType, float Amount);
 
+	/** Drain a need by Amount (positive = remove). Clamped to [0, 100]. Broadcasts OnNeedChanged. */
+	UFUNCTION(BlueprintCallable, Category = "Needs")
+	void ApplyDrain(ENeedType NeedType, float Amount);
+
 	/** Directly set a need value — used by the save/load system. Broadcasts OnNeedChanged. */
 	UFUNCTION(BlueprintCallable, Category = "Needs")
 	void SetNeedValue(ENeedType NeedType, float Value);

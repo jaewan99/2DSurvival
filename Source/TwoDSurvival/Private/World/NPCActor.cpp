@@ -5,6 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "World/NPCDefinition.h"
+#include "Components/JournalComponent.h"
 
 ANPCActor::ANPCActor()
 {
@@ -54,6 +55,13 @@ void ANPCActor::OnInteract_Implementation(ABaseCharacter* Interactor)
 
 	InteractingPlayer = Interactor;
 	Interactor->OpenDialogue(this);
+
+	// Auto-add a first-meeting note the very first time the player talks to this NPC.
+	if (NPCDef && Interactor->JournalComponent
+		&& !Interactor->JournalComponent->HasNoteForNPC(NPCDef->NPCID))
+	{
+		Interactor->JournalComponent->AddNPCMetNote(NPCDef);
+	}
 }
 
 // --- Out-of-range close ---
@@ -75,4 +83,13 @@ void ANPCActor::NotifyTradeCompleted()
 {
 	bTradeCompleted = true;
 	OnTradeCompleted.Broadcast(this);
+
+	// Add a trade-complete note to the player's journal.
+	if (ABaseCharacter* Player = InteractingPlayer.Get())
+	{
+		if (NPCDef && Player->JournalComponent)
+		{
+			Player->JournalComponent->AddNPCTradeNote(NPCDef);
+		}
+	}
 }

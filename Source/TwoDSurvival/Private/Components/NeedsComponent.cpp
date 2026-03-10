@@ -122,6 +122,11 @@ void UNeedsComponent::RestoreNeed(ENeedType NeedType, float Amount)
 	}
 }
 
+void UNeedsComponent::ApplyDrain(ENeedType NeedType, float Amount)
+{
+	SetNeedValue(NeedType, GetNeedValue(NeedType) - Amount);
+}
+
 void UNeedsComponent::SetNeedValue(ENeedType NeedType, float Value)
 {
 	float* ValuePtr = nullptr;

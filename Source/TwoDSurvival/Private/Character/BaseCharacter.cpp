@@ -35,6 +35,10 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "UI/MapWidget.h"
+#include "UI/JournalWidget.h"
+#include "UI/StatusEffectWidget.h"
+#include "Components/JournalComponent.h"
+#include "Components/StatusEffectComponent.h"
 #include "World/StreetManager.h"
 // DamageableInterface included via BaseCharacter.h
 
@@ -83,6 +87,12 @@ ABaseCharacter::ABaseCharacter()
 	// Needs component — tracks Hunger, Thirst, Fatigue over time
 	NeedsComponent = CreateDefaultSubobject<UNeedsComponent>(TEXT("NeedsComponent"));
 
+	// Journal component — tracks player notes about NPC exchanges
+	JournalComponent = CreateDefaultSubobject<UJournalComponent>(TEXT("JournalComponent"));
+
+	// Status effect component — manages Bleeding, Frostbite, etc.
+	StatusEffectComponent = CreateDefaultSubobject<UStatusEffectComponent>(TEXT("StatusEffectComponent"));
+
 	// Post-process component for mood-driven visual effects (desaturation/color shift)
 	MoodPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("MoodPostProcess"));
 	MoodPostProcess->SetupAttachment(SpringArm);
@@ -123,6 +133,7 @@ void ABaseCharacter::CreateInputActions()
 	IA_Attack = MakeAction(TEXT("IA_Attack"));
 
 	UInputAction* IA_Map = MakeAction(TEXT("IA_ToggleMap"));
+	IA_ToggleJournal = MakeAction(TEXT("IA_ToggleJournal"));
 	GameplayIMC = NewObject<UInputMappingContext>(this, TEXT("GameplayIMC"));
 	IA_ToggleMap = IA_Map;
 
@@ -138,6 +149,7 @@ void ABaseCharacter::CreateInputActions()
 	GameplayIMC->MapKey(IA_LoadGameAction, EKeys::F9);
 	GameplayIMC->MapKey(IA_Attack, EKeys::LeftMouseButton);
 	GameplayIMC->MapKey(IA_ToggleMap, EKeys::M);
+	GameplayIMC->MapKey(IA_ToggleJournal, EKeys::J);
 }
 
 void ABaseCharacter::ScanItemDefinitions()
@@ -184,6 +196,10 @@ void ABaseCharacter::BeginPlay()
 	if (CraftingComponent)
 		CraftingComponent->OnCraftingChanged.AddDynamic(this, &ABaseCharacter::OnCraftSucceeded);
 
+	// Recalculate movement speed whenever status effects change.
+	if (StatusEffectComponent)
+		StatusEffectComponent->OnStatusEffectsChanged.AddDynamic(this, &ABaseCharacter::OnStatusEffectsChanged);
+
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		// Always show the mouse cursor — GameAndUI lets game input and UI input coexist
@@ -200,6 +216,16 @@ void ABaseCharacter::BeginPlay()
 			if (HotbarWidgetInstance)
 			{
 				HotbarWidgetInstance->AddToViewport(0);
+			}
+		}
+
+		// Create the always-visible status effect strip
+		if (StatusEffectWidgetClass)
+		{
+			StatusEffectWidgetInstance = CreateWidget<UStatusEffectWidget>(PC, StatusEffectWidgetClass);
+			if (StatusEffectWidgetInstance)
+			{
+				StatusEffectWidgetInstance->AddToViewport(1);
 			}
 		}
 
@@ -351,6 +377,10 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		// Map (M)
 		if (IA_ToggleMap)
 			EIC->BindAction(IA_ToggleMap, ETriggerEvent::Started, this, &ABaseCharacter::ToggleMap);
+
+		// Journal (J)
+		if (IA_ToggleJournal)
+			EIC->BindAction(IA_ToggleJournal, ETriggerEvent::Started, this, &ABaseCharacter::ToggleJournal);
 	}
 }
 
@@ -554,6 +584,15 @@ void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent
 		EquippedFlashlight->RefillBattery(Slot.ItemDef->BatteryRestoreAmount);
 	}
 
+	// Status effect cures
+	if (StatusEffectComponent && !Slot.ItemDef->StatusEffectCures.IsEmpty())
+	{
+		for (EStatusEffect Cure : Slot.ItemDef->StatusEffectCures)
+		{
+			StatusEffectComponent->RemoveEffect(Cure);
+		}
+	}
+
 	FromInventory->RemoveItem(SlotIndex, 1);
 
 	const FBodyPartHealth BodyPart = HealthComponent->GetBodyPart(EBodyPart::Body);
@@ -643,9 +682,15 @@ void ABaseCharacter::RecalculateMovementSpeed()
 	// Movement mode is MOVE_None while sleeping — MaxWalkSpeed is irrelevant, skip
 	if (NeedsComponent && NeedsComponent->bIsSleeping) return;
 
-	const float HealthMult = HealthComponent ? HealthComponent->GetMovementSpeedMultiplier() : 1.f;
-	const float NeedsMult  = NeedsComponent  ? NeedsComponent->GetSpeedMultiplier()          : 1.f;
-	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * HealthMult * NeedsMult;
+	const float HealthMult  = HealthComponent       ? HealthComponent->GetMovementSpeedMultiplier() : 1.f;
+	const float NeedsMult   = NeedsComponent        ? NeedsComponent->GetSpeedMultiplier()          : 1.f;
+	const float StatusMult  = StatusEffectComponent ? StatusEffectComponent->GetSpeedMultiplier()    : 1.f;
+	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * HealthMult * NeedsMult * StatusMult;
+}
+
+void ABaseCharacter::OnStatusEffectsChanged()
+{
+	RecalculateMovementSpeed();
 }
 
 void ABaseCharacter::OnNeedChanged(ENeedType NeedType, float CurrentValue, float MaxValue, bool bIsWarning)
@@ -768,6 +813,17 @@ void ABaseCharacter::SaveGame_Implementation()
 			SaveObj->SavedWeatherState   = WM->CurrentWeather;
 			SaveObj->SavedWeatherElapsed = WM->GetStateElapsedTime();
 		}
+	}
+
+	// Journal notes
+	SaveObj->JournalEntries = JournalComponent->Entries;
+
+	// Status effects (Wet is excluded — it re-derives from weather on next tick)
+	SaveObj->SavedStatusEffects.Empty();
+	for (const FActiveStatusEffect& Fx : StatusEffectComponent->ActiveEffects)
+	{
+		if (Fx.Type != EStatusEffect::Wet)
+			SaveObj->SavedStatusEffects.Add(Fx);
 	}
 
 	UGameplayStatics::SaveGameToSlot(SaveObj, SaveSlotName, SaveUserIndex);
@@ -911,6 +967,14 @@ void ABaseCharacter::LoadGame_Implementation()
 		}
 	}
 
+	// Restore journal notes
+	JournalComponent->Entries = SaveObj->JournalEntries;
+	JournalComponent->OnJournalUpdated.Broadcast();
+
+	// Restore status effects
+	StatusEffectComponent->ActiveEffects = SaveObj->SavedStatusEffects;
+	StatusEffectComponent->OnStatusEffectsChanged.Broadcast();
+
 	// Recalculate movement speed accounting for leg damage and needs
 	RecalculateMovementSpeed();
 
@@ -997,6 +1061,21 @@ void ABaseCharacter::TakeMeleeDamage_Implementation(float Amount, AActor* Damage
 	HealthComponent->ApplyDamage(EBodyPart::Body, Amount);
 
 	if (NeedsComponent) NeedsComponent->ModifyMood(-5.f);
+
+	// Heavy hits can trigger status effects.
+	if (StatusEffectComponent)
+	{
+		// Bleeding: > 25 damage, 30% chance.
+		if (Amount > 25.f && FMath::RandRange(0.f, 1.f) < 0.30f)
+		{
+			StatusEffectComponent->ApplyEffect(EStatusEffect::Bleeding);
+		}
+		// Concussion: > 40 damage, 20% chance (representing a heavy blow).
+		if (Amount > 40.f && FMath::RandRange(0.f, 1.f) < 0.20f)
+		{
+			StatusEffectComponent->ApplyEffect(EStatusEffect::Concussion, 1.f, 45.f);
+		}
+	}
 
 	UE_LOG(LogTemp, Log, TEXT("BaseCharacter took %.1f melee damage from %s"),
 		Amount, DamageSource ? *DamageSource->GetName() : TEXT("Unknown"));
@@ -1196,6 +1275,27 @@ void ABaseCharacter::ToggleMap()
 		if (MapWidgetInstance)
 		{
 			MapWidgetInstance->AddToViewport(8);
+			ShowUICursor();
+		}
+	}
+}
+
+void ABaseCharacter::ToggleJournal()
+{
+	if (JournalWidgetInstance)
+	{
+		JournalWidgetInstance->RemoveFromParent();
+		JournalWidgetInstance = nullptr;
+		HideUICursor();
+	}
+	else if (JournalWidgetClass)
+	{
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!PC) return;
+		JournalWidgetInstance = CreateWidget<UJournalWidget>(PC, JournalWidgetClass);
+		if (JournalWidgetInstance)
+		{
+			JournalWidgetInstance->AddToViewport(8);
 			ShowUICursor();
 		}
 	}

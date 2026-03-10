@@ -31,6 +31,10 @@ class ANPCActor;
 class USoundBase;
 class UPostProcessComponent;
 class UMapWidget;
+class UJournalComponent;
+class UJournalWidget;
+class UStatusEffectComponent;
+class UStatusEffectWidget;
 
 enum class EBodyPart : uint8;
 
@@ -68,6 +72,12 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mood")
 	UPostProcessComponent* MoodPostProcess;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Journal")
+	UJournalComponent* JournalComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StatusEffects")
+	UStatusEffectComponent* StatusEffectComponent;
 
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -402,7 +412,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UMapWidget> MapWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UJournalWidget> JournalWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UStatusEffectWidget> StatusEffectWidgetClass;
+
 	void ToggleMap();
+	void ToggleJournal();
 
 	/**
 	 * Opens the dialogue widget for the given NPC.
@@ -450,6 +467,7 @@ private:
 	UPROPERTY() UInputAction* IA_LoadGameAction;
 	UPROPERTY() UInputAction* IA_Attack;
 	UPROPERTY() UInputAction* IA_ToggleMap;
+	UPROPERTY() UInputAction* IA_ToggleJournal;
 	UPROPERTY() UInputMappingContext* GameplayIMC;
 
 	/** Creates all programmatic input actions and mapping context at runtime. */
@@ -516,6 +534,15 @@ private:
 
 	UPROPERTY()
 	UMapWidget* MapWidgetInstance;
+
+	UPROPERTY()
+	UJournalWidget* JournalWidgetInstance;
+
+	UPROPERTY()
+	UStatusEffectWidget* StatusEffectWidgetInstance;
+
+	UFUNCTION()
+	void OnStatusEffectsChanged();
 
 	/** Scans all UItemDefinition assets via AssetRegistry and builds ItemDefMap. */
 	void ScanItemDefinitions();

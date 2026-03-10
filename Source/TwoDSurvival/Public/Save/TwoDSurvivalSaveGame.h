@@ -6,6 +6,8 @@
 #include "GameFramework/SaveGame.h"
 #include "Character/HealthTypes.h"
 #include "World/WeatherManager.h"   // EWeatherState
+#include "Components/JournalComponent.h"    // FJournalEntry
+#include "Combat/StatusEffectTypes.h"       // FActiveStatusEffect
 #include "TwoDSurvivalSaveGame.generated.h"
 
 /** Serialized representation of one inventory slot. */
@@ -121,4 +123,12 @@ public:
 	/** Elapsed seconds in the current weather state at the moment of save. */
 	UPROPERTY()
 	float SavedWeatherElapsed = 0.f;
+
+	// --- Journal ---
+	UPROPERTY()
+	TArray<FJournalEntry> JournalEntries;
+
+	// --- Status Effects ---
+	UPROPERTY()
+	TArray<FActiveStatusEffect> SavedStatusEffects;
 };

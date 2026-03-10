@@ -165,13 +165,21 @@ Player can place, move, and remove furniture/decorations inside their base.
 
 Tick-based debuffs applied to the player from wounds, environment, or enemy attacks. Very Project Zomboid.
 
-- [ ] **Status effect types** — `EStatusEffect` enum: `Bleeding`, `Infected`, `Poisoned`, `BrokenBone`. Each has a severity float and duration.
-- [ ] **UStatusEffectComponent (C++)** — on BaseCharacter. `TArray<FActiveStatusEffect>` ticked each frame. `ApplyEffect(EStatusEffect, Severity, Duration)` and `RemoveEffect(EStatusEffect)`. `FOnStatusEffectsChanged` delegate for HUD refresh.
-- [ ] **Per-effect behaviour** — Bleeding: 0.3 HP/s drain on Body; Infected: spreads to nearby body parts over time, 0.1 HP/s; Poisoned: drains Hunger + Thirst 2× faster + 0.2 HP/s; BrokenBone: halves `MaxWalkSpeed` (via `RecalculateMovementSpeed`).
-- [ ] **Wound trigger** — `TakeMeleeDamage_Implementation`: high-damage hits (> threshold) have a configurable chance to apply Bleeding. Untreated Bleeding after N seconds transitions to Infected.
-- [ ] **Cure items** — `UItemDefinition` gains `StatusEffectCure` (EStatusEffect, EditCondition=Consumable). `UseItem_Implementation` calls `StatusEffectComp->RemoveEffect`. E.g. Bandage cures Bleeding, Antibiotics cures Infected.
-- [ ] **Status HUD** — extend `UNeedsWarningWidget` or create a separate strip of status icons that appear when effects are active.
-- [ ] **Save/load** — serialize active effects (type + remaining duration) into `UTwoDSurvivalSaveGame`.
+- [x] **Status effect types** — `EStatusEffect` enum: Bleeding, Infected, Poisoned, BrokenBone, **Frostbite**, **Hypothermia**, **Wet**, **Concussion**. `FActiveStatusEffect` struct: Type + Severity + RemainingDuration (-1 = indefinite).
+- [x] **`UStatusEffectComponent` (C++)** — on BaseCharacter. `TArray<FActiveStatusEffect>` ticked each frame. `ApplyEffect`, `RemoveEffect`, `HasEffect`, `GetSpeedMultiplier`, `GetDamageMultiplier`. `FOnStatusEffectsChanged` delegate.
+- [x] **Per-effect behaviour:**
+  - Bleeding 0.3 HP/s → Infected (after 120 s untreated) 0.1 HP/s
+  - Poisoned 0.2 HP/s + 2× Hunger/Thirst drain
+  - BrokenBone speed ×0.5 | Frostbite speed ×0.85, damage ×0.8 | Hypothermia speed ×0.7, 0.15 HP/s | Wet 1.5× Thirst drain | Concussion speed ×0.8, damage ×0.7
+- [x] **Automatic progressions** — Wet + Snow outdoors 60 s → Frostbite. Frostbite + Snow outdoors 120 s → Hypothermia. Wet auto-applies while raining/snowing outdoors; fades 60 s after going indoors.
+- [x] **Wound triggers** — `TakeMeleeDamage`: >25 dmg = 30% Bleeding; >40 dmg = 20% Concussion (45 s).
+- [x] **Cure items** — `TArray<EStatusEffect> StatusEffectCures` on `UItemDefinition`. `UseItem_Implementation` iterates and removes. E.g. Bandage={Bleeding}, Antibiotics={Infected}, Antidote={Poisoned}, Splint={BrokenBone}, HotSoup={Frostbite,Hypothermia,Wet}, Painkillers={Concussion}.
+- [x] **Status HUD** — `UStatusEffectWidget` (C++): `BindWidget EffectContainer` (VerticalBox). Shows red TextBlock per active effect, collapsed when empty. `OnEffectsRefreshed` BlueprintImplementableEvent.
+- [x] **Save/load** — `TArray<FActiveStatusEffect> SavedStatusEffects` in SaveGame. Wet excluded (re-derived from weather on next tick).
+- [ ] **Blueprint steps — Status Effects:**
+  1. Create Widget Blueprint **`WBP_StatusEffects`** (parent: `UStatusEffectWidget`). Add VerticalBox named **`EffectContainer`**. Position it on-screen (e.g. top-left corner). Optionally override `OnEffectsRefreshed` to swap TextBlocks for custom icons.
+  2. Assign **`StatusEffectWidgetClass = WBP_StatusEffects`** on **BP_BaseCharacter** Details panel → UI.
+  3. Create cure item data assets: **`DA_Bandage`** (Consumable, `StatusEffectCures = [Bleeding]`), **`DA_Antibiotics`** (`[Infected]`), **`DA_Antidote`** (`[Poisoned]`), **`DA_Splint`** (`[BrokenBone]`), **`DA_HotSoup`** (`[Frostbite, Hypothermia, Wet]`), **`DA_Painkillers`** (`[Concussion]`). Assign icons.
 
 ## Flashlight
 
@@ -219,16 +227,22 @@ Randomised weather states that layer on top of the day/night cycle, affecting vi
   3. Optionally tune **`MinStateDurationSeconds`** / **`MaxStateDurationSeconds`** (defaults: 120 s / 600 s).
   4. Press Play — weather will transition automatically. Check the Output Log for `[WeatherManager] State →` messages to confirm it's running.
 
-## Quest / Journal System
+## Journal System
 
-Ties NPC trades, map exploration, and world events into a narrative loop.
+A personal notebook that auto-records NPC encounters and exchanges. Press J to open.
 
-- [ ] **UQuestDefinition (UDataAsset)** — QuestID (FName), Title (FText), Description (FText), linked NPCID (FName), `EQuestCompletionType` (TradeCompleted / StreetVisited / ItemCollected), TargetID (FName — NPC ID / Street ID / Item ID), RewardItemID + RewardCount.
-- [ ] **UQuestComponent (C++)** — on BaseCharacter. `TArray<FName> ActiveQuests`, `TSet<FName> CompletedQuests`. `StartQuest(QuestID)`, `CheckCompletion()`. Binds `ANPCActor::OnTradeCompleted` and `UStreetManager::OnStreetChanged` to auto-trigger completion checks.
-- [ ] **Quest givers** — `UNPCDefinition` gains optional `StartsQuestID (FName)`. On dialogue open: if quest not started yet, `QuestComponent->StartQuest(StartsQuestID)`.
-- [ ] **Journal widget (J key)** — `UJournalWidget` (C++ UUserWidget): left list of active/completed quests, right panel shows title + description + completion status. Built same pattern as `UCraftingWidget`. Toggle with J key via programmatic `IA_ToggleJournal`.
-- [ ] **Reward delivery** — on quest complete: `TryAddItem(RewardItem, RewardCount)` on player inventory + `NeedsComponent->ModifyMood(10.f)`.
-- [ ] **Save/load** — `TSet<FName> ActiveQuests` + `TSet<FName> CompletedQuests` added to `UTwoDSurvivalSaveGame`.
+- [x] **`FJournalEntry` struct** — NoteText, SourceNPCID, Day/Month/Year (stamped from ATimeManager).
+- [x] **`UJournalComponent` (C++)** — on BaseCharacter. `AddEntry()`, `HasNoteForNPC()`, `AddNPCMetNote()`, `AddNPCTradeNote()`. `FOnJournalUpdated` delegate.
+- [x] **Auto-notes from NPC interactions** — First meeting: "Met [Name]. They want Nx [Item] for Nx [Item]." Trade complete: "[Name]: Trade complete. Gave Nx [Item], received Nx [Item]." Logged via `ANPCActor::OnInteract` and `NotifyTradeCompleted`.
+- [x] **`UJournalEntryWidget` (C++)** — BindWidgetOptional DateText/NoteText. `SetEntryData()`, `OnEntryRefreshed` BlueprintImplementableEvent.
+- [x] **`UJournalWidget` (C++)** — ScrollBox EntryList, `EntryWidgetClass` (EditDefaultsOnly), `RebuildEntries()` bound to `OnJournalUpdated`. Newest first.
+- [x] **J key toggle** — programmatic `IA_ToggleJournal` mapped to J. Shows/hides `UJournalWidget` instance. Follows same ShowUICursor/HideUICursor pattern.
+- [x] **Save/load** — `TArray<FJournalEntry> JournalEntries` in `UTwoDSurvivalSaveGame`.
+- [ ] **Blueprint steps — Journal widget:**
+  1. Create Widget Blueprint **`WBP_JournalEntry`** (parent: `UJournalEntryWidget`). Add TextBlock **`DateText`** (small, grey) and TextBlock **`NoteText`** (main body, wrapping). Style freely. Override `OnEntryRefreshed` for custom per-note styling.
+  2. Create Widget Blueprint **`WBP_JournalWidget`** (parent: `UJournalWidget`). Add ScrollBox named **`EntryList`** (fill the widget). Set **`EntryWidgetClass = WBP_JournalEntry`** in class defaults.
+  3. Assign **`JournalWidgetClass = WBP_JournalWidget`** on **BP_BaseCharacter** Details panel → UI.
+  4. Press **J** in-game after talking to an NPC — a note should appear automatically.
 
 ## Random World Events
 
