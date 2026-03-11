@@ -35,6 +35,10 @@ class UJournalComponent;
 class UJournalWidget;
 class UStatusEffectComponent;
 class UStatusEffectWidget;
+class USkillComponent;
+class USkillHUDWidget;
+class APlaceableActor;
+class UMaterialInterface;
 
 enum class EBodyPart : uint8;
 
@@ -78,6 +82,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StatusEffects")
 	UStatusEffectComponent* StatusEffectComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skills")
+	USkillComponent* SkillComponent;
 
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -418,8 +425,64 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UStatusEffectWidget> StatusEffectWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<USkillHUDWidget> SkillHUDWidgetClass;
+
 	void ToggleMap();
 	void ToggleJournal();
+	void ToggleSkillHUD();
+
+	// ── Placement mode ─────────────────────────────────────────────────────────
+
+	/**
+	 * Enters placement mode for the item at the given slot.
+	 * Spawns a ghost APlaceableActor that follows the mouse cursor (XZ plane, Y=PlayerY).
+	 * Does nothing if the item has no PlaceableClass or if already in placement mode.
+	 * Called from the inventory context menu "Place" button (Blueprint → C++ call).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Placement")
+	void PlaceItem(int32 SlotIndex, UInventoryComponent* FromInventory);
+
+	/**
+	 * Confirms the current placement: finalizes the ghost actor, removes the item from
+	 * inventory, and exits placement mode. No-op if ghost position is blocked.
+	 * Bound to LMB (IA_Attack gate) while bIsInPlacementMode is true.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Placement")
+	void ConfirmPlacement();
+
+	/**
+	 * Cancels placement mode: destroys the ghost actor and returns to normal play.
+	 * Bound to the Escape key (IA_PlaceCancel) while in placement mode.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Placement")
+	void CancelPlacement();
+
+	/** True while the player is previewing a placement position. */
+	UPROPERTY(BlueprintReadOnly, Category = "Placement")
+	bool bIsInPlacementMode = false;
+
+	/**
+	 * Snap grid size in cm. Placed actors snap to multiples of this value on X and Z.
+	 * Tune in BP_BaseCharacter Details → Placement.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Placement",
+		meta = (ClampMin = "1.0"))
+	float PlacementGridSize = 50.f;
+
+	/**
+	 * Semi-transparent material applied to the ghost when the placement position is clear.
+	 * Create a simple translucent material with a green tint and assign here.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Placement")
+	TObjectPtr<UMaterialInterface> PlacementValidMaterial;
+
+	/**
+	 * Semi-transparent material applied to the ghost when the placement position is blocked.
+	 * Create a simple translucent material with a red tint and assign here.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Placement")
+	TObjectPtr<UMaterialInterface> PlacementInvalidMaterial;
 
 	/**
 	 * Opens the dialogue widget for the given NPC.
@@ -468,6 +531,8 @@ private:
 	UPROPERTY() UInputAction* IA_Attack;
 	UPROPERTY() UInputAction* IA_ToggleMap;
 	UPROPERTY() UInputAction* IA_ToggleJournal;
+	UPROPERTY() UInputAction* IA_ToggleSkillHUD;
+	UPROPERTY() UInputAction* IA_PlaceCancel;
 	UPROPERTY() UInputMappingContext* GameplayIMC;
 
 	/** Creates all programmatic input actions and mapping context at runtime. */
@@ -541,6 +606,9 @@ private:
 	UPROPERTY()
 	UStatusEffectWidget* StatusEffectWidgetInstance;
 
+	UPROPERTY()
+	USkillHUDWidget* SkillHUDInstance;
+
 	UFUNCTION()
 	void OnStatusEffectsChanged();
 
@@ -554,6 +622,31 @@ private:
 
 	// Last forward vector pushed to the materials — skips redundant updates.
 	FVector LastForwardForMaterial = FVector::ZeroVector;
+
+	// Active ghost actor while in placement mode. Null when not placing.
+	UPROPERTY()
+	TObjectPtr<APlaceableActor> PlacementGhost;
+
+	// Item definition being placed — used to finalize and remove from inventory on confirm.
+	UPROPERTY()
+	TObjectPtr<UItemDefinition> PlacementItemDef;
+
+	// Inventory the placeable item came from — used to remove the item on confirm.
+	UPROPERTY()
+	TObjectPtr<UInventoryComponent> PlacementFromInventory;
+
+	// Slot index in PlacementFromInventory where the placeable item lives.
+	int32 PlacementSlotIndex = -1;
+
+	// Cached per-tick flag: true when the ghost's current position is unobstructed.
+	bool bPlacementIsValid = false;
+
+	// Moves PlacementGhost to the mouse-projected XZ position and updates its tint.
+	void UpdatePlacementGhost();
+
+	// Returns the world XZ position under the mouse projected onto Y=PlayerY plane.
+	// Returns false if the deproject ray is parallel to the plane (edge case).
+	bool GetMousePlacementLocation(FVector& OutLocation) const;
 
 	FTimerHandle AttackCooldownTimer;
 	FTimerHandle UnarmedHitTimer;

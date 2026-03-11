@@ -37,9 +37,13 @@
 #include "UI/MapWidget.h"
 #include "UI/JournalWidget.h"
 #include "UI/StatusEffectWidget.h"
+#include "UI/SkillHUDWidget.h"
 #include "Components/JournalComponent.h"
 #include "Components/StatusEffectComponent.h"
+#include "Components/SkillComponent.h"
 #include "World/StreetManager.h"
+#include "World/PlaceableActor.h"
+#include "Materials/MaterialInterface.h"
 // DamageableInterface included via BaseCharacter.h
 
 ABaseCharacter::ABaseCharacter()
@@ -93,6 +97,9 @@ ABaseCharacter::ABaseCharacter()
 	// Status effect component — manages Bleeding, Frostbite, etc.
 	StatusEffectComponent = CreateDefaultSubobject<UStatusEffectComponent>(TEXT("StatusEffectComponent"));
 
+	// Skill component — Combat, Crafting, Scavenging XP tracks.
+	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
+
 	// Post-process component for mood-driven visual effects (desaturation/color shift)
 	MoodPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("MoodPostProcess"));
 	MoodPostProcess->SetupAttachment(SpringArm);
@@ -134,6 +141,8 @@ void ABaseCharacter::CreateInputActions()
 
 	UInputAction* IA_Map = MakeAction(TEXT("IA_ToggleMap"));
 	IA_ToggleJournal = MakeAction(TEXT("IA_ToggleJournal"));
+	IA_ToggleSkillHUD = MakeAction(TEXT("IA_ToggleSkillHUD"));
+	IA_PlaceCancel    = MakeAction(TEXT("IA_PlaceCancel"));
 	GameplayIMC = NewObject<UInputMappingContext>(this, TEXT("GameplayIMC"));
 	IA_ToggleMap = IA_Map;
 
@@ -150,6 +159,8 @@ void ABaseCharacter::CreateInputActions()
 	GameplayIMC->MapKey(IA_Attack, EKeys::LeftMouseButton);
 	GameplayIMC->MapKey(IA_ToggleMap, EKeys::M);
 	GameplayIMC->MapKey(IA_ToggleJournal, EKeys::J);
+	GameplayIMC->MapKey(IA_ToggleSkillHUD, EKeys::K);
+	GameplayIMC->MapKey(IA_PlaceCancel, EKeys::Escape);
 }
 
 void ABaseCharacter::ScanItemDefinitions()
@@ -297,6 +308,12 @@ void ABaseCharacter::Tick(float DeltaTime)
 		UpdateDraggedPropPosition();
 	}
 
+	// Update ghost position when in placement mode.
+	if (bIsInPlacementMode && PlacementGhost)
+	{
+		UpdatePlacementGhost();
+	}
+
 	// Double the drain rate when running (~100 cm/s) or attacking
 	const bool bIsMovingFast = GetVelocity().SizeSquared() > 10000.f;
 	NeedsComponent->SetActiveMovement(bIsMovingFast || bIsAttacking);
@@ -381,6 +398,14 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		// Journal (J)
 		if (IA_ToggleJournal)
 			EIC->BindAction(IA_ToggleJournal, ETriggerEvent::Started, this, &ABaseCharacter::ToggleJournal);
+
+		// Skill HUD (K)
+		if (IA_ToggleSkillHUD)
+			EIC->BindAction(IA_ToggleSkillHUD, ETriggerEvent::Started, this, &ABaseCharacter::ToggleSkillHUD);
+
+		// Placement cancel (Escape)
+		if (IA_PlaceCancel)
+			EIC->BindAction(IA_PlaceCancel, ETriggerEvent::Started, this, &ABaseCharacter::CancelPlacement);
 	}
 }
 
@@ -715,6 +740,139 @@ UItemDefinition* ABaseCharacter::FindItemDefByID(FName ItemID) const
 	return Found ? *Found : nullptr;
 }
 
+// ── Placement mode ────────────────────────────────────────────────────────────
+
+void ABaseCharacter::PlaceItem(int32 SlotIndex, UInventoryComponent* FromInventory)
+{
+	if (!FromInventory) return;
+
+	FInventorySlot Slot = FromInventory->GetSlot(SlotIndex);
+	if (Slot.IsEmpty() || !Slot.ItemDef) return;
+	if (!Slot.ItemDef->bIsPlaceable || !Slot.ItemDef->PlaceableClass) return;
+
+	// Only one placement session at a time.
+	if (bIsInPlacementMode) CancelPlacement();
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	PlacementGhost = GetWorld()->SpawnActor<APlaceableActor>(
+		Slot.ItemDef->PlaceableClass, GetActorLocation(), FRotator::ZeroRotator, Params);
+
+	if (!PlacementGhost) return;
+
+	PlacementGhost->SetGhostMode(true, PlacementValidMaterial);
+	PlacementItemDef       = Slot.ItemDef;
+	PlacementFromInventory = FromInventory;
+	PlacementSlotIndex     = SlotIndex;
+	bIsInPlacementMode     = true;
+	bPlacementIsValid      = true;
+
+	UE_LOG(LogTemp, Log, TEXT("[Placement] Entered placement mode for '%s'."),
+		*Slot.ItemDef->DisplayName.ToString());
+}
+
+void ABaseCharacter::ConfirmPlacement()
+{
+	if (!bIsInPlacementMode || !PlacementGhost) return;
+
+	if (!bPlacementIsValid)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Placement] Position blocked — cannot place here."));
+		return;
+	}
+
+	// Finalize the ghost in-place — it becomes a real actor.
+	PlacementGhost->FinalizePlace(PlacementItemDef);
+
+	// Consume the item from inventory.
+	if (PlacementFromInventory)
+	{
+		PlacementFromInventory->RemoveItem(PlacementSlotIndex, 1);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[Placement] Placed '%s' at %s."),
+		*PlacementItemDef->DisplayName.ToString(),
+		*PlacementGhost->GetActorLocation().ToString());
+
+	// Clear state.
+	PlacementGhost         = nullptr;
+	PlacementItemDef       = nullptr;
+	PlacementFromInventory = nullptr;
+	PlacementSlotIndex     = -1;
+	bIsInPlacementMode     = false;
+}
+
+void ABaseCharacter::CancelPlacement()
+{
+	if (!bIsInPlacementMode) return;
+
+	if (PlacementGhost)
+	{
+		PlacementGhost->Destroy();
+		PlacementGhost = nullptr;
+	}
+
+	PlacementItemDef       = nullptr;
+	PlacementFromInventory = nullptr;
+	PlacementSlotIndex     = -1;
+	bIsInPlacementMode     = false;
+
+	UE_LOG(LogTemp, Log, TEXT("[Placement] Placement cancelled."));
+}
+
+void ABaseCharacter::UpdatePlacementGhost()
+{
+	FVector TargetLocation;
+	if (!GetMousePlacementLocation(TargetLocation)) return;
+
+	PlacementGhost->SetActorLocation(TargetLocation);
+
+	// Overlap check — exclude the ghost itself and the player capsule.
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(PlacementGhost);
+	QueryParams.AddIgnoredActor(this);
+
+	const FVector HalfExtent = PlacementGhost->Mesh->Bounds.BoxExtent * 0.9f;
+	const bool bBlocked = GetWorld()->OverlapAnyTestByChannel(
+		TargetLocation,
+		FQuat::Identity,
+		ECC_WorldStatic,
+		FCollisionShape::MakeBox(HalfExtent),
+		QueryParams);
+
+	bPlacementIsValid = !bBlocked;
+	PlacementGhost->SetGhostValid(bPlacementIsValid, PlacementValidMaterial, PlacementInvalidMaterial);
+}
+
+bool ABaseCharacter::GetMousePlacementLocation(FVector& OutLocation) const
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return false;
+
+	FVector WorldOrigin, WorldDirection;
+	if (!PC->DeprojectMousePositionToWorld(WorldOrigin, WorldDirection)) return false;
+
+	// Intersect the mouse ray with the Y=PlayerY plane (2D side-scroller).
+	const float PlayerY = GetActorLocation().Y;
+	if (FMath::IsNearlyZero(WorldDirection.Y)) return false;  // Ray parallel to plane.
+
+	const float T = (PlayerY - WorldOrigin.Y) / WorldDirection.Y;
+	if (T < 0.f) return false;  // Intersection is behind the camera.
+
+	const FVector Hit = WorldOrigin + WorldDirection * T;
+
+	// Snap to grid on X and Z.
+	const float G = FMath::Max(1.f, PlacementGridSize);
+	OutLocation = FVector(
+		FMath::RoundToFloat(Hit.X / G) * G,
+		PlayerY,
+		FMath::RoundToFloat(Hit.Z / G) * G);
+
+	return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ABaseCharacter::SaveGame_Implementation()
 {
 	UTwoDSurvivalSaveGame* SaveObj = Cast<UTwoDSurvivalSaveGame>(
@@ -824,6 +982,26 @@ void ABaseCharacter::SaveGame_Implementation()
 	{
 		if (Fx.Type != EStatusEffect::Wet)
 			SaveObj->SavedStatusEffects.Add(Fx);
+	}
+
+	// Skills
+	SkillComponent->GetSaveData(SaveObj->SavedSkillLevels, SaveObj->SavedSkillXP);
+
+	// Placed actors — skip ghost previews (bIsGhost=true).
+	SaveObj->PlacedActors.Empty();
+	TArray<AActor*> AllPlaced;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), APlaceableActor::StaticClass(), AllPlaced);
+	for (AActor* A : AllPlaced)
+	{
+		APlaceableActor* PA = Cast<APlaceableActor>(A);
+		if (!PA || PA->bIsGhost || !PA->SourceItemDef) continue;
+
+		FPlacedActorSaveData Entry;
+		Entry.PlacementID = PA->PlacementID;
+		Entry.ActorClass  = FSoftClassPath(PA->GetClass());
+		Entry.Transform   = PA->GetActorTransform();
+		Entry.ItemDefID   = PA->SourceItemDef->ItemID;
+		SaveObj->PlacedActors.Add(Entry);
 	}
 
 	UGameplayStatics::SaveGameToSlot(SaveObj, SaveSlotName, SaveUserIndex);
@@ -975,6 +1153,39 @@ void ABaseCharacter::LoadGame_Implementation()
 	StatusEffectComponent->ActiveEffects = SaveObj->SavedStatusEffects;
 	StatusEffectComponent->OnStatusEffectsChanged.Broadcast();
 
+	// Restore skills
+	if (SaveObj->SavedSkillLevels.Num() == 3 && SaveObj->SavedSkillXP.Num() == 3)
+	{
+		SkillComponent->ApplySaveData(SaveObj->SavedSkillLevels, SaveObj->SavedSkillXP);
+	}
+
+	// Restore placed actors — destroy all existing placed actors first, then respawn from save.
+	TArray<AActor*> ExistingPlaced;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), APlaceableActor::StaticClass(), ExistingPlaced);
+	for (AActor* A : ExistingPlaced)
+	{
+		APlaceableActor* PA = Cast<APlaceableActor>(A);
+		if (PA && !PA->bIsGhost) PA->Destroy();
+	}
+
+	FActorSpawnParameters PlaceParams;
+	PlaceParams.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	for (const FPlacedActorSaveData& Entry : SaveObj->PlacedActors)
+	{
+		UClass* ActorClass = Entry.ActorClass.TryLoadClass<APlaceableActor>();
+		if (!ActorClass) continue;
+
+		APlaceableActor* PA = GetWorld()->SpawnActor<APlaceableActor>(
+			ActorClass, Entry.Transform, PlaceParams);
+		if (!PA) continue;
+
+		PA->PlacementID   = Entry.PlacementID;
+		PA->SourceItemDef = FindItemDefByID(Entry.ItemDefID);
+		// Already spawned as a normal actor (not ghost), collision is enabled by default.
+	}
+
 	// Recalculate movement speed accounting for leg damage and needs
 	RecalculateMovementSpeed();
 
@@ -1112,6 +1323,13 @@ void ABaseCharacter::HandlePlayerDeath()
 
 void ABaseCharacter::OnAttackPressed()
 {
+	// LMB in placement mode confirms the ghost position instead of attacking.
+	if (bIsInPlacementMode)
+	{
+		ConfirmPlacement();
+		return;
+	}
+
 	if (bIsAttacking) return;
 
 	// Don't interrupt an in-progress traversal action (vault, climb, etc.)
@@ -1141,7 +1359,9 @@ void ABaseCharacter::OnAttackPressed()
 
 	if (MontageToPlay)
 	{
-		const float MontageLength = PlayAnimMontage(MontageToPlay);
+		// Combat Lv3: play animations faster to reduce effective cooldown.
+		const float PlayRate = SkillComponent ? SkillComponent->GetAttackPlayRateMultiplier() : 1.f;
+		const float MontageLength = PlayAnimMontage(MontageToPlay, PlayRate);
 
 		if (MontageLength > 0.f)
 		{
@@ -1159,8 +1379,11 @@ void ABaseCharacter::OnAttackPressed()
 
 	// Fallback: montage not assigned or failed to play — reset via timer so the player
 	// is never permanently locked out of attacking.
+	const float EffectiveCooldown = SkillComponent
+		? AttackCooldownDuration * (1.f / SkillComponent->GetAttackPlayRateMultiplier())
+		: AttackCooldownDuration;
 	GetWorldTimerManager().SetTimer(
-		AttackCooldownTimer, this, &ABaseCharacter::ResetAttack, AttackCooldownDuration, false);
+		AttackCooldownTimer, this, &ABaseCharacter::ResetAttack, EffectiveCooldown, false);
 }
 
 void ABaseCharacter::ResetAttack()
@@ -1296,6 +1519,32 @@ void ABaseCharacter::ToggleJournal()
 		if (JournalWidgetInstance)
 		{
 			JournalWidgetInstance->AddToViewport(8);
+			ShowUICursor();
+		}
+	}
+}
+
+void ABaseCharacter::ToggleSkillHUD()
+{
+	if (SkillHUDInstance)
+	{
+		SkillHUDInstance->RemoveFromParent();
+		SkillHUDInstance = nullptr;
+		HideUICursor();
+	}
+	else if (SkillHUDWidgetClass)
+	{
+		APlayerController* PC = Cast<APlayerController>(GetController());
+		if (!PC) return;
+
+		SkillHUDInstance = CreateWidget<USkillHUDWidget>(PC, SkillHUDWidgetClass);
+		if (SkillHUDInstance)
+		{
+			SkillHUDInstance->AddToViewport(10);
+			// Offset slightly from Health HUD default position so they don't overlap.
+			const FVector2D InitialPos(50.f, 220.f);
+			SkillHUDInstance->SetPositionInViewport(InitialPos, false);
+			SkillHUDInstance->InitDragPosition(InitialPos);
 			ShowUICursor();
 		}
 	}

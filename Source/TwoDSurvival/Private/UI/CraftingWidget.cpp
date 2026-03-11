@@ -55,8 +55,12 @@ void UCraftingWidget::BuildRecipeList()
 		if (!Recipe) continue;
 
 		UItemDefinition* OutputDef = CraftingComp->FindItemDef(Recipe->OutputItemID);
-		FText RecipeName = OutputDef ? OutputDef->DisplayName : FText::FromName(Recipe->OutputItemID);
-		bool bCanCraft   = CraftingComp->CanCraft(Recipe, InventoryComp);
+		FText BaseName = OutputDef ? OutputDef->DisplayName : FText::FromName(Recipe->OutputItemID);
+		// Prefix upgrade recipes with an arrow so they're visually distinct in the list.
+		FText RecipeName = Recipe->IsUpgradeRecipe()
+			? FText::FromString(FString::Printf(TEXT("↑ %s"), *BaseName.ToString()))
+			: BaseName;
+		bool bCanCraft = CraftingComp->CanCraft(Recipe, InventoryComp);
 
 		UCraftingRecipeEntry* Entry = CreateWidget<UCraftingRecipeEntry>(GetOwningPlayer(), RecipeEntryClass);
 		if (Entry)
@@ -118,6 +122,49 @@ void UCraftingWidget::RefreshDetail()
 	{
 		IngredientContainer->ClearChildren();
 
+		// For upgrade recipes show the base item at the top in cyan so it's
+		// clearly distinguishable from the additional material requirements.
+		if (SelectedRecipe->IsUpgradeRecipe())
+		{
+			UItemDefinition* BaseDef = CraftingComp->FindItemDef(SelectedRecipe->InputItemID);
+			const int32 Have = InventoryComp ? InventoryComp->CountItemByID(SelectedRecipe->InputItemID) : 0;
+			const bool bHasBase = Have >= 1;
+
+			UHorizontalBox* BaseRow = WidgetTree->ConstructWidget<UHorizontalBox>();
+
+			UTextBlock* BaseLabelTB = WidgetTree->ConstructWidget<UTextBlock>();
+			FString BaseLabel = FString::Printf(TEXT("↑  %s"),
+				BaseDef ? *BaseDef->DisplayName.ToString() : *SelectedRecipe->InputItemID.ToString());
+			BaseLabelTB->SetText(FText::FromString(BaseLabel));
+			// Cyan tint to distinguish the base item from normal ingredients.
+			BaseLabelTB->SetColorAndOpacity(FSlateColor(FLinearColor(0.2f, 0.85f, 1.f)));
+			UHorizontalBoxSlot* BaseLabelSlot = BaseRow->AddChildToHorizontalBox(BaseLabelTB);
+			if (BaseLabelSlot)
+			{
+				FSlateChildSize Fill;
+				Fill.SizeRule = ESlateSizeRule::Fill;
+				BaseLabelSlot->SetSize(Fill);
+			}
+
+			UTextBlock* BaseCountTB = WidgetTree->ConstructWidget<UTextBlock>();
+			BaseCountTB->SetText(FText::FromString(FString::Printf(TEXT("%d / 1"), Have)));
+			BaseCountTB->SetColorAndOpacity(FSlateColor(bHasBase
+				? FLinearColor(0.2f, 1.f, 0.2f)
+				: FLinearColor(1.f, 0.3f, 0.3f)));
+			BaseRow->AddChildToHorizontalBox(BaseCountTB);
+
+			IngredientContainer->AddChildToVerticalBox(BaseRow);
+
+			// Thin separator between base item and additional materials.
+			if (!SelectedRecipe->Ingredients.IsEmpty())
+			{
+				UTextBlock* Sep = WidgetTree->ConstructWidget<UTextBlock>();
+				Sep->SetText(FText::FromString(TEXT("──────────────────")));
+				Sep->SetColorAndOpacity(FSlateColor(FLinearColor(0.3f, 0.3f, 0.3f)));
+				IngredientContainer->AddChildToVerticalBox(Sep);
+			}
+		}
+
 		for (const FIngredientEntry& Ingr : SelectedRecipe->Ingredients)
 		{
 			UItemDefinition* IngrDef = CraftingComp->FindItemDef(Ingr.ItemID);
@@ -172,7 +219,11 @@ void UCraftingWidget::OnCraftClicked()
 	const bool bSuccess = CraftingComp->TryCraft(SelectedRecipe, InventoryComp);
 
 	if (CraftStatusText)
-		CraftStatusText->SetText(FText::FromString(bSuccess ? TEXT("Crafted!") : TEXT("Cannot craft")));
+	{
+		const bool bIsUpgrade = SelectedRecipe->IsUpgradeRecipe();
+		CraftStatusText->SetText(FText::FromString(
+			bSuccess ? (bIsUpgrade ? TEXT("Upgraded!") : TEXT("Crafted!")) : TEXT("Cannot craft")));
+	}
 
 	UGameplayStatics::PlaySound2D(this, bSuccess ? SFX_CraftSuccess : SFX_CraftFail);
 

@@ -5,6 +5,8 @@
 #include "Inventory/InventoryComponent.h"
 #include "Inventory/ItemDefinition.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Character/BaseCharacter.h"
+#include "Components/SkillComponent.h"
 
 UCraftingComponent::UCraftingComponent()
 {
@@ -56,6 +58,22 @@ bool UCraftingComponent::CanCraft(UCraftingRecipe* Recipe, UInventoryComponent* 
 {
 	if (!Recipe || !Inventory) return false;
 
+	// Crafting Lv2 gate — recipes with MinCraftingLevel > 1 require the skill level.
+	if (Recipe->MinCraftingLevel > 1)
+	{
+		const ABaseCharacter* Owner = Cast<ABaseCharacter>(GetOwner());
+		const int32 CraftLevel = (Owner && Owner->SkillComponent)
+			? Owner->SkillComponent->GetLevel(ESkillType::Crafting) : 1;
+		if (CraftLevel < Recipe->MinCraftingLevel) return false;
+	}
+
+	// Upgrade recipes also require 1× of the base item.
+	if (Recipe->IsUpgradeRecipe())
+	{
+		if (Inventory->CountItemByID(Recipe->InputItemID) < 1)
+			return false;
+	}
+
 	for (const FIngredientEntry& Ingr : Recipe->Ingredients)
 	{
 		if (Inventory->CountItemByID(Ingr.ItemID) < Ingr.Count)
@@ -71,12 +89,30 @@ bool UCraftingComponent::TryCraft(UCraftingRecipe* Recipe, UInventoryComponent* 
 	UItemDefinition* OutputDef = FindItemDef(Recipe->OutputItemID);
 	if (!OutputDef) return false;
 
+	// Consume the base item for upgrade recipes.
+	if (Recipe->IsUpgradeRecipe())
+	{
+		Inventory->RemoveItemByID(Recipe->InputItemID, 1);
+	}
+
 	// Consume ingredients
 	for (const FIngredientEntry& Ingr : Recipe->Ingredients)
 		Inventory->RemoveItemByID(Ingr.ItemID, Ingr.Count);
 
-	// Add output
-	Inventory->TryAddItem(OutputDef, Recipe->OutputCount);
+	// Crafting Lv3: 10% chance to produce double output.
+	ABaseCharacter* Owner = Cast<ABaseCharacter>(GetOwner());
+	USkillComponent* SC = Owner ? Owner->SkillComponent : nullptr;
+
+	const int32 OutputCount = (SC && SC->RollDoubleOutput())
+		? Recipe->OutputCount * 2 : Recipe->OutputCount;
+
+	Inventory->TryAddItem(OutputDef, OutputCount);
+
+	// Grant crafting XP.
+	if (SC)
+	{
+		SC->AddXP(ESkillType::Crafting, SC->CraftingXPPerCraft);
+	}
 
 	OnCraftingChanged.Broadcast();
 	return true;

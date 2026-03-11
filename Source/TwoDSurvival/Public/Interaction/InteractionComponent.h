@@ -62,6 +62,12 @@ public:
 	 * While locked, UpdateFocusedInteractable is a no-op — other actors cannot steal focus.
 	 * Also overrides InteractionPrompt to "Release" so the HUD reflects the release action.
 	 */
+	/**
+	 * Updates the detection sphere radius at runtime.
+	 * Called by USkillComponent when Scavenging reaches Lv3 (×1.5 range bonus).
+	 */
+	void SetDetectionRadius(float NewRadius);
+
 	void LockFocus(AActor* Actor);
 
 	/**

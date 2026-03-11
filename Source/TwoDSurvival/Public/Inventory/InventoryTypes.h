@@ -14,6 +14,7 @@ enum class EItemCategory : uint8
 	Tool       UMETA(DisplayName = "Tool"),
 	Consumable UMETA(DisplayName = "Consumable"),
 	Resource   UMETA(DisplayName = "Resource"),
+	Furniture  UMETA(DisplayName = "Furniture"),
 	Misc       UMETA(DisplayName = "Misc"),
 };
 

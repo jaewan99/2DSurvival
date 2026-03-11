@@ -7,6 +7,7 @@
 #include "Character/BaseCharacter.h"
 #include "Components/NeedsComponent.h"
 #include "Components/StatusEffectComponent.h"
+#include "Components/SkillComponent.h"
 
 AWeaponBase::AWeaponBase()
 {
@@ -80,18 +81,21 @@ void AWeaponBase::OnHitboxOverlap(
 
 	HitActorsThisSwing.Add(OtherActor);
 
-	// Apply needs and status-effect damage penalties from the wielder.
+	// Apply needs, status-effect, and skill damage multipliers from the wielder.
 	float NeedsMultiplier  = 1.f;
 	float StatusMultiplier = 1.f;
+	float SkillMultiplier  = 1.f;
 	if (ABaseCharacter* WielderChar = Cast<ABaseCharacter>(GetOwner()))
 	{
 		if (WielderChar->NeedsComponent)
 			NeedsMultiplier = WielderChar->NeedsComponent->GetDamageMultiplier();
 		if (WielderChar->StatusEffectComponent)
 			StatusMultiplier = WielderChar->StatusEffectComponent->GetDamageMultiplier();
+		if (WielderChar->SkillComponent)
+			SkillMultiplier = WielderChar->SkillComponent->GetCombatDamageMultiplier();
 	}
 
-	const float FinalDamage = BaseDamage * StoredDamageMultiplier * NeedsMultiplier * StatusMultiplier;
+	const float FinalDamage = BaseDamage * StoredDamageMultiplier * NeedsMultiplier * StatusMultiplier * SkillMultiplier;
 	IDamageable::Execute_TakeMeleeDamage(OtherActor, FinalDamage, GetOwner());
 
 	UE_LOG(LogTemp, Log, TEXT("WeaponBase: Hit %s for %.1f damage"), *OtherActor->GetName(), FinalDamage);

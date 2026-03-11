@@ -10,6 +10,7 @@
 #include "ItemDefinition.generated.h"
 
 class AFlashlightActor;
+class APlaceableActor;
 
 /**
  * Data asset that defines a single item type.
@@ -101,4 +102,21 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Weapon",
 		meta = (EditCondition = "ItemCategory == EItemCategory::Weapon"))
 	TSubclassOf<AWeaponBase> WeaponActorClass;
+
+	// --- Placeable ---
+
+	/**
+	 * If true, this item can be placed in the world via the inventory context menu "Place" button.
+	 * Set ItemCategory = Furniture for placeable items.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Placeable")
+	bool bIsPlaceable = false;
+
+	/**
+	 * The actor class spawned when placing this item.
+	 * Create a Blueprint child of APlaceableActor and assign it here.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Placeable",
+		meta = (EditCondition = "bIsPlaceable"))
+	TSubclassOf<APlaceableActor> PlaceableClass;
 };

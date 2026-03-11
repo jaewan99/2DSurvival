@@ -10,6 +10,29 @@
 #include "Combat/StatusEffectTypes.h"       // FActiveStatusEffect
 #include "TwoDSurvivalSaveGame.generated.h"
 
+/** Serialized representation of one player-placed actor. */
+USTRUCT()
+struct FPlacedActorSaveData
+{
+	GENERATED_BODY()
+
+	/** Stable GUID matching APlaceableActor::PlacementID — used to avoid duplicates on load. */
+	UPROPERTY()
+	FGuid PlacementID;
+
+	/** Soft path to the Blueprint subclass so we can re-spawn the correct actor on load. */
+	UPROPERTY()
+	FSoftClassPath ActorClass;
+
+	/** World transform at the time of save. */
+	UPROPERTY()
+	FTransform Transform;
+
+	/** ItemID of the SourceItemDef — restored at load so pick-up returns the correct item. */
+	UPROPERTY()
+	FName ItemDefID;
+};
+
 /** Serialized representation of one inventory slot. */
 USTRUCT()
 struct FSavedInventorySlot
@@ -131,4 +154,18 @@ public:
 	// --- Status Effects ---
 	UPROPERTY()
 	TArray<FActiveStatusEffect> SavedStatusEffects;
+
+	// --- Skills ---
+	// Indexed by (int32)ESkillType: [0]=Combat, [1]=Crafting, [2]=Scavenging.
+	UPROPERTY()
+	TArray<int32> SavedSkillLevels;
+
+	UPROPERTY()
+	TArray<int32> SavedSkillXP;
+
+	// --- Placed actors ---
+	// All APlaceableActor instances the player has confirmed in the world.
+	// Ghost actors (bIsGhost=true) are excluded.
+	UPROPERTY()
+	TArray<FPlacedActorSaveData> PlacedActors;
 };

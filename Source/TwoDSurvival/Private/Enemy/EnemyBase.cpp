@@ -2,6 +2,7 @@
 
 #include "Enemy/EnemyBase.h"
 #include "Character/BaseCharacter.h"
+#include "Components/SkillComponent.h"
 #include "World/FlashlightActor.h"
 #include "Character/HealthComponent.h"
 #include "Character/HealthTypes.h"
@@ -408,6 +409,15 @@ void AEnemyBase::OnEnemyDeath()
 
 	SpawnLoot();
 
+	// Grant combat XP to the player who killed this enemy.
+	if (ABaseCharacter* Killer = CachedPlayer.Get())
+	{
+		if (Killer->SkillComponent)
+		{
+			Killer->SkillComponent->AddXP(ESkillType::Combat, Killer->SkillComponent->CombatXPPerKill);
+		}
+	}
+
 	GetWorldTimerManager().SetTimer(DeathDestroyTimer, this, &AEnemyBase::DestroyEnemy, DeathDestroyDelay, false);
 }
 
@@ -416,22 +426,40 @@ void AEnemyBase::SpawnLoot()
 	UWorld* World = GetWorld();
 	if (!World || LootTable.Num() == 0) return;
 
-	for (const FLootEntry& Entry : LootTable)
+	// Scavenging Lv2: each loot entry gets one extra roll.
+	int32 ExtraRolls = 0;
+	if (ABaseCharacter* Player = CachedPlayer.Get())
 	{
-		if (!Entry.ItemDef) continue;
-		if (FMath::FRand() > Entry.DropChance) continue;
+		if (Player->SkillComponent)
+			ExtraRolls = Player->SkillComponent->GetExtraLootRolls();
+	}
+
+	// Helper lambda: attempt one drop roll for an entry.
+	auto TryDropEntry = [&](const FLootEntry& Entry)
+	{
+		if (!Entry.ItemDef) return;
+		if (FMath::FRand() > Entry.DropChance) return;
 
 		int32 Count = FMath::RandRange(Entry.MinCount, Entry.MaxCount);
-		if (Count <= 0) continue;
+		if (Count <= 0) return;
 
-		// Spread drops slightly so they don't stack exactly
 		FVector DropLoc = GetActorLocation() + FVector(FMath::RandRange(-40.f, 40.f), 0.f, 10.f);
-
 		AWorldItem* Pickup = World->SpawnActor<AWorldItem>(AWorldItem::StaticClass(), FTransform(FRotator::ZeroRotator, DropLoc));
 		if (Pickup)
 		{
 			Pickup->ItemDef = Entry.ItemDef;
 			Pickup->Quantity = Count;
+		}
+	};
+
+	for (const FLootEntry& Entry : LootTable)
+	{
+		TryDropEntry(Entry);
+
+		// Scavenging Lv2: one extra independent roll per entry.
+		for (int32 i = 0; i < ExtraRolls; ++i)
+		{
+			TryDropEntry(Entry);
 		}
 	}
 }

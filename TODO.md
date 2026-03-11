@@ -34,6 +34,13 @@ Items are loosely ordered by priority / dependency.
 ## World / Interaction
 
 - [x] **Door** — `ADoorActor` (C++ AActor + IInteractable). `DoorMesh` (BlockAll closed / NoCollision open), `InteractionBox`, `bIsLocked`, `bStartOpen`. Prompt reads "Open Door" / "Close Door" / "Locked". Blueprint child `BP_DoorActor` (assign mesh).
+- [x] **Environmental hazard zones (C++)** — `AHazardZone` (C++ AActor): `UBoxComponent` trigger, configurable `EffectsToApply` (TArray<EStatusEffect>), `DirectDamagePerInterval` (raw body HP), `EffectInterval` (default 2 s), `SFX_Ambient` looping sound. On player enter: apply effects immediately + start interval timer + play ambient. On exit: clear timer + stop ambient (effects persist until cured). Blueprint children configure each hazard type via Details panel.
+- [ ] **Blueprint steps — Hazard zones** — Create a Blueprint child per hazard type (parent: `AHazardZone`):
+  1. **`BP_FireHazard`** — `EffectsToApply = [Bleeding]`, `DirectDamagePerInterval = 5`. Assign a fire/flame mesh to the `Mesh` component. Assign a crackling fire sound to `SFX_Ambient`.
+  2. **`BP_ToxicHazard`** — `EffectsToApply = [Poisoned]`, `DirectDamagePerInterval = 0`. Assign a gas cloud/particle mesh. Assign a hissing/bubbling sound to `SFX_Ambient`.
+  3. **`BP_ColdHazard`** — `EffectsToApply = [Wet]`, `DirectDamagePerInterval = 0`. Assign a frost/mist mesh. Assign a wind/chill sound to `SFX_Ambient`.
+  4. Resize the **`HazardBox`** component in each Blueprint's viewport to match the hazard's footprint.
+  5. Place instances in any sublevel. Tune `EffectInterval` (lower = more aggressive) per variant in class defaults.
 - [ ] **Blueprint steps — Sound effects** — Assign Sound Wave / Sound Cue assets in the editor (all EditDefaultsOnly, no C++ changes needed):
   - **BP_BaseCharacter** Details → Sound: `SFX_Interact`, `SFX_InventoryOpen`, `SFX_InventoryClose`, `SFX_CraftOpen`, `SFX_CraftClose`, `SFX_DialogueOpen`, `SFX_DialogueClose`, `SFX_HealthHUDToggle`
   - In **WBP_InventoryWidget** (or BP_BaseCharacter's `ToggleInventory` override): call `PlayUISound(SFX_InventoryOpen)` on open, `PlayUISound(SFX_InventoryClose)` on close
@@ -83,7 +90,14 @@ Items are loosely ordered by priority / dependency.
 - [x] **Recipe data asset** — `UCraftingRecipe` (UDataAsset): `RecipeID`, `Ingredients` (`FIngredientEntry` array of ItemID + Count), `OutputItemID`, `OutputCount`.
 - [x] **Crafting component** — `UCraftingComponent` (C++) on the player: auto-scans all recipes + item defs via AssetRegistry. `CanCraft`, `TryCraft`, `FindItemDef` (public).
 - [x] **Crafting UI** — `UCraftingWidget` (C++ UUserWidget): left `ScrollBox` recipe list, right detail panel (output icon/name, ingredient rows with have/need color-coded, craft button, status text). Binds `OnInventoryChanged` to refresh craftability.
-- [ ] **Item upgrading** — extend `UCraftingRecipe` with an optional `InputItemDef` (item being upgraded) + `OutputItemDef` (upgraded result). `UCraftingComponent->Upgrade(Recipe, SlotIndex)` removes the base item and adds the upgraded one.
+- [x] **Item upgrading** — `UCraftingRecipe` gains optional `InputItemID` (FName) + `IsUpgradeRecipe()` helper. `CanCraft` also requires 1× InputItemID in inventory. `TryCraft` removes 1× InputItemID before consuming ingredients. Crafting widget: upgrade recipes prefixed with "↑ " in the list; base item shown in cyan at the top of the ingredient panel with a separator line; status text says "Upgraded!" on success.
+- [ ] **Blueprint steps — Upgrade recipes** — Create a data asset per upgrade:
+  1. Right-click → Miscellaneous → Data Asset → **UCraftingRecipe**. Name it `DA_Recipe_Upgrade_<ItemName>` (e.g. `DA_Recipe_Upgrade_SteelSword`).
+  2. Set **InputItemID** = the ItemID of the base item being consumed (e.g. `IronSword`).
+  3. Set **Ingredients** = the additional materials required (e.g. SteelIngot×2).
+  4. Set **OutputItemID** = the upgraded item's ItemID (e.g. `SteelSword`), **OutputCount** = 1.
+  5. Optionally set **MinCraftingLevel** = 2 to gate behind Crafting Lv2.
+  6. The recipe auto-appears in the crafting UI prefixed with "↑" — no extra wiring needed.
 - [x] **Crafting station** — `ACraftingTable` (C++ AActor + IInteractable): `UBoxComponent InteractionBox`, press E → `ToggleCrafting()`. `OnBoxEndOverlap` calls `Player->CloseCrafting()` when player walks away.
 
 ## Moods / Needs
@@ -152,14 +166,22 @@ NPCs with unique roles (drug dealer, father, young girl, etc.) that the player c
 
 ## House Customization
 
-Player can place, move, and remove furniture/decorations inside their base.
+Player can place and pick up furniture/decorations inside their base.
 
-- [ ] **Placeable item data** — extend `UItemDefinition` with `bIsPlaceable` bool + `TSubclassOf<APlaceableActor> PlaceableClass` (EditCondition gated).
-- [ ] **Placeable actor base** — `APlaceableActor` (C++): static mesh, collision, a `PlacementID` (FGuid for save/load). Blueprint children for each furniture piece.
-- [ ] **Placement mode** — dedicated input (e.g. RMB while holding a placeable item) enters placement mode: ghost mesh follows cursor clamped to a grid, green/red tint based on overlap. Confirm (LMB) spawns the actor; cancel (Esc) exits.
-- [ ] **Move / remove** — interact with a placed actor to get a context menu: Move (re-enter placement mode with that actor) or Pick Up (destroys actor, returns item to inventory).
-- [ ] **Room zones** — optional axis-aligned box volumes that define valid placement areas; placement outside a zone is rejected. Allows "only place furniture indoors".
-- [ ] **Persistence** — save placed actor transforms + class references in `USaveGame`; respawn them on load.
+- [x] **Placeable item data** — `bIsPlaceable` bool + `TSubclassOf<APlaceableActor> PlaceableClass` on `UItemDefinition`. `Furniture` added to `EItemCategory` for context menu gating.
+- [x] **Placeable actor base** — `APlaceableActor` (C++ AActor + IInteractable): `UStaticMeshComponent` + `UBoxComponent`, `FGuid PlacementID`, `SourceItemDef`. `SetGhostMode`/`SetGhostValid`/`FinalizePlace` lifecycle. Press E → pick up (returns item to inventory + destroys self).
+- [x] **Placement mode** — `ABaseCharacter::PlaceItem(SlotIndex, Inv)` (BlueprintCallable) enters mode: spawns ghost actor, positions it via mouse deprojection onto Y=PlayerY plane each Tick, snaps to `PlacementGridSize` (default 50 cm) on X and Z. `OverlapAnyTestByChannel` drives green/red tint via `PlacementValidMaterial`/`PlacementInvalidMaterial`. LMB confirms (calls `ConfirmPlacement`), Escape cancels.
+- [x] **Pick up** — Press E on a placed actor → `TryAddItem` → self-destroy (same pattern as `AWorldItem`). "Move" = pick up and immediately re-enter placement mode via context menu.
+- [x] **Persistence** — `FPlacedActorSaveData` struct (PlacementID + FSoftClassPath + Transform + ItemDefID) in `UTwoDSurvivalSaveGame::PlacedActors`. SaveGame scans all `APlaceableActor`s (excluding ghosts); LoadGame destroys existing placed actors and respawns from save data.
+- [ ] **Blueprint steps — Placeable items:**
+  1. Create two simple translucent materials in the Content Browser:
+     - **`M_PlacementValid`** — translucent, green tint (BaseColor = green, Opacity ≈ 0.5).
+     - **`M_PlacementInvalid`** — translucent, red tint (BaseColor = red, Opacity ≈ 0.5).
+     Assign both to **BP_BaseCharacter** Details → Placement → `PlacementValidMaterial` / `PlacementInvalidMaterial`.
+  2. For each piece of furniture, create a Blueprint child of `APlaceableActor` (e.g. **`BP_Chair`**, **`BP_Table`**). In the Blueprint viewport, assign a Static Mesh to the **Mesh** component. Optionally resize **InteractionBox** to match the mesh footprint.
+  3. Create an item data asset for each piece (e.g. **`DA_Chair`**): set `ItemCategory = Furniture`, `bIsPlaceable = true`, `PlaceableClass = BP_Chair`. Assign an icon.
+  4. In **WBP_ContextMenu**: add a **Button** named **`Btn_Place`** (Is Focusable = false). In Event Construct, show it when `SlotData.ItemDef.bIsPlaceable == true`. OnClicked → call `PlaceItem(SlotIndex, OwnerComp)` on the player → Remove from Parent.
+  5. Press **E** on a placed actor to pick it back up. To move: pick up, then place again.
 
 ## Status Effects
 
@@ -248,12 +270,21 @@ A personal notebook that auto-records NPC encounters and exchanges. Press J to o
 
 Scheduled events that fire on day/night transitions, keeping the world feeling alive.
 
-- [ ] **FWorldEvent struct** — EventID (FName), `EWorldEventType` enum (TravellingTrader / ScavengerRaid / SupplyCrate), SpawnChance (float 0–1), MinDaysBetween (int32).
-- [ ] **AWorldEventManager (C++ AActor)** — binds `ATimeManager::OnDayPhaseChanged`. On each night start: iterates `EventTable (TArray<FWorldEvent>)`, rolls per entry vs SpawnChance, fires the event if cooldown elapsed.
-- [ ] **Travelling Trader** — spawns a special `BP_NPC_Trader` on the current street with a randomised inventory of rare items for trade. Despawns at next dawn.
-- [ ] **Scavenger Raid** — spawns 2–4 extra enemies on the current street immediately, bypassing the normal spawner cap.
-- [ ] **Supply Crate** — spawns an `AWorldItem` cluster (3–5 random loot items from a configurable rare loot table) at a fixed spawn point in the level.
-- [ ] **HUD notification** — `FOnWorldEventStarted` delegate broadcast; `UStreetHUDWidget` shows a brief text banner (e.g. "A trader has arrived!") for 5 seconds.
+- [x] **FWorldEvent struct** — EventID (FName), `EWorldEventType` enum (TravellingTrader / ScavengerRaid / SupplyCrate), SpawnChance (float 0–1), MinDaysBetween (int32). Per-type config fields: TraderClass / EnemyClass+MinMax / CrateLootTable+Rolls.
+- [x] **AWorldEventManager (C++ AActor)** — binds `ATimeManager::OnDayPhaseChanged`. On each night start: iterates `EventTable (TArray<FWorldEvent>)`, checks `MinDaysBetween` cooldown per EventID, rolls SpawnChance, fires the event. Dawn auto-despawns the trader.
+- [x] **Travelling Trader** — spawns `TraderClass` (ANPCActor child) near the player on night start. Destroyed automatically at next dawn. Configure trade via NPCDef on the BP_NPC_Trader.
+- [x] **Scavenger Raid** — spawns `MinEnemies–MaxEnemies` enemies of `EnemyClass` scattered near the player.
+- [x] **Supply Crate** — spawns `MinCrateRolls–MaxCrateRolls` `AWorldItem` pickups from `CrateLootTable` (uses existing `FLootEntry` DropChance/MinCount/MaxCount).
+- [x] **HUD notification** — `FOnWorldEventStarted` delegate on `AWorldEventManager`; `UStreetHUDWidget` binds it in `NativeConstruct` and shows `EventBanner` TextBlock for 5 s via `ShowNotification()`.
+- [ ] **Blueprint steps — World Events:**
+  1. Create Blueprint child **`BP_WorldEventManager`** (parent: `AWorldEventManager`). Place one instance in the persistent level.
+  2. In Details → Events → **EventTable**, add entries (one per event variant):
+     - All entries: set **EventID** (unique FName), **EventType**, **SpawnChance** (0–1), **MinDaysBetween**, **BannerText** (e.g. "A trader has arrived!").
+     - **TravellingTrader** entry: set **TraderClass** = `BP_NPC_Trader` (an ANPCActor child with a trade NPCDef assigned in its Details panel).
+     - **ScavengerRaid** entry: set **EnemyClass** = `BP_EnemyBase`, **MinEnemies** = 2, **MaxEnemies** = 4.
+     - **SupplyCrate** entry: fill **CrateLootTable** (ItemDef + DropChance + MinCount/MaxCount per row), set **MinCrateRolls** = 3, **MaxCrateRolls** = 5.
+  3. Open **WBP_StreetHUD**. Add a **TextBlock** named exactly **`EventBanner`** (top-center, large font). Set its default **Visibility = Collapsed**. The C++ shows and hides it automatically.
+  4. Press **Play**, advance time to night (or set `DayDurationSeconds = 30` temporarily), and check the Output Log for `[WorldEventManager]` messages confirming events fire.
 
 ## Skill / XP System
 
@@ -263,7 +294,12 @@ Passive progression that rewards consistent playstyle choices.
 - [ ] **USkillComponent (C++)** — on BaseCharacter. `TMap<ESkillType, int32> XP` + `TMap<ESkillType, int32> Level`. `AddXP(ESkillType, Amount)`: accumulates XP, levels up at thresholds (100 × Level), broadcasts `FOnSkillLevelUp`. `GetLevel(ESkillType)` queried by other systems.
 - [ ] **XP sources** — Combat: `+15 XP` per enemy kill (bound to `AEnemyBase::OnDeath` via delegate). Crafting: `+10 XP` per successful craft (bound to `UCraftingComponent::OnCraftingChanged`). Scavenging: `+5 XP` per item pickup (in `AWorldItem::OnInteract`).
 - [ ] **Level bonuses** — Combat Lv2: +10% melee damage; Lv3: attack cooldown –15%. Crafting Lv2: unlocks a second tier of recipes (check `GetLevel(Crafting) >= 2` in `CanCraft`); Lv3: 10% chance to craft double output. Scavenging Lv2: +1 extra item roll on enemy loot tables; Lv3: `AWorldItem` pickup range +50%.
-- [ ] **Skill HUD** — small persistent widget (bottom-left) showing current level per skill; flashes on level-up with `FOnSkillLevelUp` delegate. Or surface in the Journal widget as a second tab.
+- [x] **Skill HUD (C++)** — `USkillRowWidget` (SkillLabel, LevelText, XPBar, optional XPText; per-skill bar colors; `OnLevelUp` BlueprintImplementableEvent). `USkillHUDWidget` (3 rows + optional TitleBar drag handle; binds `OnSkillXPChanged`/`OnSkillLevelUp` delegates; refreshes only the changed row). Toggle with **K** key (programmatic `IA_ToggleSkillHUD`). Spawns at (50, 220) below the Health HUD default position.
+- [ ] **Blueprint steps — Skill HUD:**
+  1. Create Widget Blueprint **`WBP_SkillRow`** (parent: `USkillRowWidget`). Add: TextBlock **`SkillLabel`**, TextBlock **`LevelText`**, ProgressBar **`XPBar`**. Optionally add TextBlock **`XPText`** for "75 / 100" display. Style freely. Optionally override **`OnLevelUp`** to play a flash animation.
+  2. Create Widget Blueprint **`WBP_SkillHUD`** (parent: `USkillHUDWidget`). Add three **`WBP_SkillRow`** instances named exactly **`Row_Combat`**, **`Row_Crafting`**, **`Row_Scavenging`**. Optionally add a Border named **`TitleBar`** at the top for drag-to-move.
+  3. Assign **`SkillHUDWidgetClass = WBP_SkillHUD`** on **BP_BaseCharacter** Details panel → UI.
+  4. Press **K** in-game to open/close the panel. Kill an enemy (+15 Combat XP), craft (+10 Crafting XP), or pick up an item (+5 Scavenging XP) to see bars fill.
 - [ ] **Save/load** — serialize `XP` + `Level` maps into `UTwoDSurvivalSaveGame`.
 
 ## Low Priority

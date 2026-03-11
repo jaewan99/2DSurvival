@@ -7,6 +7,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/NeedsComponent.h"
+#include "Components/SkillComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 AWorldItem::AWorldItem()
@@ -73,6 +74,14 @@ void AWorldItem::OnInteract_Implementation(ABaseCharacter* Interactor)
 	{
 		if (Interactor->NeedsComponent)
 			Interactor->NeedsComponent->ModifyMood(3.f);
+
+		// Grant scavenging XP.
+		if (Interactor->SkillComponent)
+		{
+			Interactor->SkillComponent->AddXP(ESkillType::Scavenging,
+				Interactor->SkillComponent->ScavengingXPPerPickup);
+		}
+
 		UGameplayStatics::PlaySoundAtLocation(this, SFX_Pickup, GetActorLocation());
 		Destroy();
 	}

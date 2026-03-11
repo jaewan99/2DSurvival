@@ -37,6 +37,15 @@ void UInteractionComponent::BeginPlay()
 	DetectionSphere->OnComponentEndOverlap.AddDynamic(this, &UInteractionComponent::OnDetectionEndOverlap);
 }
 
+void UInteractionComponent::SetDetectionRadius(float NewRadius)
+{
+	DetectionRadius = NewRadius;
+	if (DetectionSphere)
+	{
+		DetectionSphere->SetSphereRadius(NewRadius);
+	}
+}
+
 void UInteractionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);

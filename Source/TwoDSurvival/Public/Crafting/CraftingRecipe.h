@@ -47,4 +47,26 @@ public:
 	// How many of the output item are produced per craft.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting", meta = (ClampMin = 1))
 	int32 OutputCount = 1;
+
+	/**
+	 * Minimum Crafting skill level required to see and craft this recipe.
+	 * 1 = available at start (default). 2 = unlocked at Crafting Lv2. 3 = Lv3 only.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting", meta = (ClampMin = 1))
+	int32 MinCraftingLevel = 1;
+
+	/**
+	 * Optional — the item that gets consumed as the upgrade base.
+	 * When set, this becomes an UPGRADE recipe: the player must have 1 of this item
+	 * in their inventory in addition to the normal Ingredients.
+	 * On craft: 1× InputItemID is removed, Ingredients are consumed, OutputItemID is added.
+	 * Leave as None for a normal crafting recipe.
+	 *
+	 * Example: InputItemID = "IronSword", Ingredients = [SteelIngot×2], Output = "SteelSword"
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Upgrade")
+	FName InputItemID;
+
+	/** Returns true if this is an upgrade recipe (InputItemID is set). */
+	bool IsUpgradeRecipe() const { return !InputItemID.IsNone(); }
 };
