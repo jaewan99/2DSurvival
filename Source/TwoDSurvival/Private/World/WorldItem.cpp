@@ -8,6 +8,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/NeedsComponent.h"
 #include "Components/SkillComponent.h"
+#include "Components/NoiseEmitterComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 AWorldItem::AWorldItem()
@@ -83,6 +84,10 @@ void AWorldItem::OnInteract_Implementation(ABaseCharacter* Interactor)
 		}
 
 		UGameplayStatics::PlaySoundAtLocation(this, SFX_Pickup, GetActorLocation());
+
+		// Item pickup noise — rummaging through a bag is audible to nearby enemies.
+		UNoiseEmitterComponent::BroadcastNoiseAt(GetWorld(), GetActorLocation(), 200.f);
+
 		Destroy();
 	}
 }

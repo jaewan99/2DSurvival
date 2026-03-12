@@ -61,6 +61,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI")
 	float LoseAggroMultiplier = 1.5f;
 
+	// How long (seconds) the enemy stands at a noise location before giving up.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI")
+	float AlertInvestigateTime = 4.f;
+
+	// Movement speed while walking toward a heard noise.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI")
+	float AlertSpeed = 200.f;
+
 	// How long the enemy stands idle before switching to patrol.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI")
 	float IdleWaitTime = 2.f;
@@ -122,6 +130,10 @@ public:
 
 	virtual void TakeMeleeDamage_Implementation(float Amount, AActor* DamageSource) override;
 
+	// Called by UNoiseEmitterComponent when a noise is heard within range.
+	// Transitions to the Alert state unless already chasing or attacking.
+	void HearNoise(FVector NoiseOrigin);
+
 	// Called by AnimNotify_BeginAttack — enables the melee hitbox at the correct animation frame.
 	void EnableMeleeHitbox();
 
@@ -151,6 +163,15 @@ public:
 private:
 	// World position at BeginPlay — patrol wanders around this point.
 	FVector SpawnLocation;
+
+	// World position the enemy is currently investigating after hearing a noise.
+	FVector AlertLocation = FVector::ZeroVector;
+
+	// Accumulated seconds spent waiting at AlertLocation.
+	float AlertTimer = 0.f;
+
+	// True once the enemy has reached AlertLocation and is now waiting.
+	bool bReachedAlertLocation = false;
 
 	// +1 = patrolling right, -1 = patrolling left.
 	float PatrolDir = 1.f;
@@ -187,6 +208,7 @@ private:
 	// Per-state tick methods — each handles its own transitions.
 	void TickIdle(float DeltaTime);
 	void TickPatrol(float DeltaTime);
+	void TickAlert(float DeltaTime);
 	void TickChase(float DeltaTime);
 	void TickAttack(float DeltaTime);
 

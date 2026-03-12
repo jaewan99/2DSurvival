@@ -3,6 +3,7 @@
 #include "World/DoorActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/NoiseEmitterComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 ADoorActor::ADoorActor()
@@ -56,6 +57,9 @@ void ADoorActor::OnInteract_Implementation(ABaseCharacter* Interactor)
 	ApplyOpenState();
 	USoundBase* SFX = bIsOpen ? SFX_Open : SFX_Close;
 	UGameplayStatics::PlaySoundAtLocation(this, SFX, GetActorLocation());
+
+	// Door noise alerts nearby enemies.
+	UNoiseEmitterComponent::BroadcastNoiseAt(GetWorld(), GetActorLocation(), 500.f);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

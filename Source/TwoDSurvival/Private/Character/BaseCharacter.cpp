@@ -44,6 +44,7 @@
 #include "World/StreetManager.h"
 #include "World/PlaceableActor.h"
 #include "Materials/MaterialInterface.h"
+#include "Components/NoiseEmitterComponent.h"
 // DamageableInterface included via BaseCharacter.h
 
 ABaseCharacter::ABaseCharacter()
@@ -99,6 +100,9 @@ ABaseCharacter::ABaseCharacter()
 
 	// Skill component — Combat, Crafting, Scavenging XP tracks.
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
+
+	// Noise emitter — alerts nearby enemies to footsteps, combat, etc.
+	NoiseEmitterComponent = CreateDefaultSubobject<UNoiseEmitterComponent>(TEXT("NoiseEmitterComponent"));
 
 	// Post-process component for mood-driven visual effects (desaturation/color shift)
 	MoodPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("MoodPostProcess"));
@@ -317,6 +321,11 @@ void ABaseCharacter::Tick(float DeltaTime)
 	// Double the drain rate when running (~100 cm/s) or attacking
 	const bool bIsMovingFast = GetVelocity().SizeSquared() > 10000.f;
 	NeedsComponent->SetActiveMovement(bIsMovingFast || bIsAttacking);
+
+	// Emit throttled footstep noise — faster movement emits more frequently and at larger radius.
+	const float Speed = GetVelocity().Size();
+	const float SpeedFraction = (BaseWalkSpeed > 0.f) ? (Speed / BaseWalkSpeed) : 0.f;
+	NoiseEmitterComponent->TickFootstep(DeltaTime, Speed > 10.f, SpeedFraction);
 }
 
 void ABaseCharacter::Jump()
@@ -1339,6 +1348,9 @@ void ABaseCharacter::OnAttackPressed()
 	if (UIOpenCount > 0) return;
 
 	bIsAttacking = true;
+
+	// Combat noise alerts nearby enemies even before they spot the player.
+	NoiseEmitterComponent->EmitNoise(ENoiseType::Combat);
 
 	UAnimMontage* MontageToPlay = nullptr;
 

@@ -82,6 +82,7 @@ void AEnemyBase::Tick(float DeltaTime)
 	{
 	case EEnemyState::Idle:   TickIdle(DeltaTime);   break;
 	case EEnemyState::Patrol: TickPatrol(DeltaTime); break;
+	case EEnemyState::Alert:  TickAlert(DeltaTime);  break;
 	case EEnemyState::Chase:  TickChase(DeltaTime);  break;
 	case EEnemyState::Attack: TickAttack(DeltaTime); break;
 	default: break;
@@ -147,6 +148,59 @@ void AEnemyBase::TickPatrol(float DeltaTime)
 	if (XFromSpawn <= -PatrolRange) PatrolDir = 1.f;
 
 	MoveInDirection(PatrolDir, PatrolSpeed);
+}
+
+void AEnemyBase::TickAlert(float DeltaTime)
+{
+	// Visual detection during investigation upgrades immediately to Chase.
+	if (ABaseCharacter* Player = DetectPlayer())
+	{
+		CachedPlayer = Player;
+		SetEnemyState(EEnemyState::Chase);
+		return;
+	}
+
+	const float XDist = FMath::Abs(AlertLocation.X - GetActorLocation().X);
+
+	if (!bReachedAlertLocation)
+	{
+		// Walk toward the noise origin.
+		if (XDist <= 50.f)
+		{
+			bReachedAlertLocation = true;
+			GetCharacterMovement()->StopMovementImmediately();
+		}
+		else
+		{
+			const float DirX = FMath::Sign(AlertLocation.X - GetActorLocation().X);
+			MoveInDirection(DirX, AlertSpeed);
+		}
+	}
+	else
+	{
+		// Stand and look around — give up after AlertInvestigateTime seconds.
+		AlertTimer += DeltaTime;
+		if (AlertTimer >= AlertInvestigateTime)
+		{
+			SetEnemyState(EEnemyState::Patrol);
+		}
+	}
+}
+
+void AEnemyBase::HearNoise(FVector NoiseOrigin)
+{
+	// Already actively engaging — no need to downgrade to investigation.
+	if (CurrentState == EEnemyState::Chase  ||
+		CurrentState == EEnemyState::Attack ||
+		CurrentState == EEnemyState::Dead)
+	{
+		return;
+	}
+
+	AlertLocation = NoiseOrigin;
+	AlertTimer = 0.f;
+	bReachedAlertLocation = false;
+	SetEnemyState(EEnemyState::Alert);
 }
 
 void AEnemyBase::TickChase(float DeltaTime)
@@ -231,6 +285,9 @@ void AEnemyBase::SetEnemyState(EEnemyState NewState)
 		break;
 	case EEnemyState::Patrol:
 		GetCharacterMovement()->MaxWalkSpeed = PatrolSpeed;
+		break;
+	case EEnemyState::Alert:
+		GetCharacterMovement()->MaxWalkSpeed = AlertSpeed;
 		break;
 	case EEnemyState::Chase:
 		GetCharacterMovement()->MaxWalkSpeed = ChaseSpeed;

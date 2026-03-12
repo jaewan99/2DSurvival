@@ -39,6 +39,7 @@ class USkillComponent;
 class USkillHUDWidget;
 class APlaceableActor;
 class UMaterialInterface;
+class UNoiseEmitterComponent;
 
 enum class EBodyPart : uint8;
 
@@ -85,6 +86,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Skills")
 	USkillComponent* SkillComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Noise")
+	UNoiseEmitterComponent* NoiseEmitterComponent;
 
 	// Assign IA_Interact in the Blueprint child class Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
