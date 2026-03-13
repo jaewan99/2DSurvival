@@ -276,15 +276,11 @@ Scheduled events that fire on day/night transitions, keeping the world feeling a
 - [x] **Scavenger Raid** — spawns `MinEnemies–MaxEnemies` enemies of `EnemyClass` scattered near the player.
 - [x] **Supply Crate** — spawns `MinCrateRolls–MaxCrateRolls` `AWorldItem` pickups from `CrateLootTable` (uses existing `FLootEntry` DropChance/MinCount/MaxCount).
 - [x] **HUD notification** — `FOnWorldEventStarted` delegate on `AWorldEventManager`; `UStreetHUDWidget` binds it in `NativeConstruct` and shows `EventBanner` TextBlock for 5 s via `ShowNotification()`.
-- [ ] **Blueprint steps — World Events:**
-  1. Create Blueprint child **`BP_WorldEventManager`** (parent: `AWorldEventManager`). Place one instance in the persistent level.
-  2. In Details → Events → **EventTable**, add entries (one per event variant):
-     - All entries: set **EventID** (unique FName), **EventType**, **SpawnChance** (0–1), **MinDaysBetween**, **BannerText** (e.g. "A trader has arrived!").
-     - **TravellingTrader** entry: set **TraderClass** = `BP_NPC_Trader` (an ANPCActor child with a trade NPCDef assigned in its Details panel).
-     - **ScavengerRaid** entry: set **EnemyClass** = `BP_EnemyBase`, **MinEnemies** = 2, **MaxEnemies** = 4.
-     - **SupplyCrate** entry: fill **CrateLootTable** (ItemDef + DropChance + MinCount/MaxCount per row), set **MinCrateRolls** = 3, **MaxCrateRolls** = 5.
-  3. Open **WBP_StreetHUD**. Add a **TextBlock** named exactly **`EventBanner`** (top-center, large font). Set its default **Visibility = Collapsed**. The C++ shows and hides it automatically.
-  4. Press **Play**, advance time to night (or set `DayDurationSeconds = 30` temporarily), and check the Output Log for `[WorldEventManager]` messages confirming events fire.
+- [x] **Blueprint steps — World Events:**
+  1. Create **`BP_WorldEventManager`** (parent: `AWorldEventManager`). Place in persistent level. Fill **EventTable** entries (EventID, EventType, SpawnChance, MinDaysBetween, BannerText + type-specific fields). Enable **`bSpawnOnStart`** to test without waiting for night.
+  2. Create **`BP_WorldEventSpawnPoint`** (parent: `AWorldEventSpawnPoint`). Place in street sublevels. Set **SpawnPool** (actor classes to spawn) + **SpawnChance**. Leave SpawnPool empty for night-event-only location markers.
+  3. Place **`AExitSpawnPoint`** SpawnID=`"Start"` in starting street sublevel for player start position. For adjacent streets place one with SpawnID matching the incoming ExitID.
+  4. Open **WBP_StreetHUD**. Add **TextBlock** named **`EventBanner`** (top-center, Visibility=Collapsed).
 
 ## Skill / XP System
 
