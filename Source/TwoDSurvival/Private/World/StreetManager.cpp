@@ -19,6 +19,7 @@ void UStreetManager::InitializeWithStreet(UStreetDefinition* StartStreet, FVecto
 	PendingStreet         = StartStreet;
 	PendingOffset         = WorldOffset;
 	PendingTransitionType = ETransitionType::Street;
+	PendingIncomingExitID = FName("Start");  // place AExitSpawnPoint SpawnID="Start" in starting street
 	StreamingToUnload     = nullptr;
 
 	StartingStreetDef = StartStreet;
@@ -73,6 +74,7 @@ void UStreetManager::OnPlayerCrossedExit(FName ExitID)
 			*ExitID.ToString(), *Link->Destination->StreetID.ToString(), NextOffset.X);
 
 		PendingTransitionType = ETransitionType::Street;
+		PendingIncomingExitID = ExitID;  // used to find AExitSpawnPoint in the new street
 		StreamingToUnload     = ActiveStreaming;
 		PendingStreet         = Link->Destination;
 		PendingOffset         = NextOffset;
@@ -203,6 +205,11 @@ void UStreetManager::OnNewStreetShown()
 		break;
 
 	default:
+		if (!PendingIncomingExitID.IsNone())
+		{
+			TeleportPlayerToSpawnPoint(LoadedLevel, PendingIncomingExitID);
+			PendingIncomingExitID = NAME_None;
+		}
 		UE_LOG(LogTemp, Log, TEXT("[StreetManager] Now in '%s' at X=%.0f."),
 			*CurrentStreet->StreetID.ToString(), CurrentStreetWorldOffset.X);
 		break;

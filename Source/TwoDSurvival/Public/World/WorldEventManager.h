@@ -11,6 +11,7 @@ class ANPCActor;
 class ABaseCharacter;
 class ATimeManager;
 class AWorldItem;
+class AWorldEventSpawnPoint;
 
 // ── Event type ──────────────────────────────────────────────────────────────
 
@@ -150,9 +151,20 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Events")
 	float BannerDuration = 5.f;
 
+	/** If true, fires RollEvents() once at game start (after a short delay for the street to stream in).
+	 *  Useful for populating the starting street with enemies/traders on load. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Events")
+	bool bSpawnOnStart = false;
+
+	/** Delay in seconds before the startup spawn fires. Increase if your street takes longer to stream in. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Events",
+		meta = (EditCondition = "bSpawnOnStart", ClampMin = "0.0"))
+	float SpawnOnStartDelay = 1.5f;
+
 	/**
-	 * Horizontal scatter radius (cm) used when placing raid enemies or crate items.
-	 * Enemies / items land within this distance of the player on the X axis.
+	 * Fallback scatter radius (cm) on the X axis around the player.
+	 * Only used when no AWorldEventSpawnPoint actors are placed in the level.
+	 * If spawn points exist, this is ignored — locations come from those actors instead.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Events")
 	float SpawnScatterRadius = 400.f;
@@ -170,11 +182,16 @@ private:
 	UPROPERTY()
 	TObjectPtr<ANPCActor> ActiveTrader;
 
+	// All AWorldEventSpawnPoint actors found in the level at BeginPlay.
+	UPROPERTY()
+	TArray<TObjectPtr<AWorldEventSpawnPoint>> SpawnPoints;
+
 	// Called each dawn/dusk by ATimeManager::OnDayPhaseChanged.
 	UFUNCTION()
 	void OnDayPhaseChanged(bool bIsNight);
 
-	// Iterates EventTable and fires eligible events for the current night.
+	// Iterates EventTable and fires eligible events. Called at night and optionally on start.
+	UFUNCTION()
 	void RollEvents();
 
 	// Absolute day count across all years/months — used for cooldown arithmetic.
@@ -189,8 +206,9 @@ private:
 	ABaseCharacter* GetPlayerCharacter() const;
 
 	/**
-	 * Returns a scatter position near Origin.
-	 * Offset is applied only on the X axis to match the 2D side-scrolling world.
+	 * Returns a spawn location.
+	 * If AWorldEventSpawnPoint actors exist in the level, picks one at random.
+	 * Falls back to scattering on the X axis around Origin if none are placed.
 	 */
-	FVector GetScatterLocation(const FVector& Origin) const;
+	FVector GetSpawnLocation(const FVector& Origin) const;
 };

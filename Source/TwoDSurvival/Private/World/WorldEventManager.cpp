@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "World/WorldEventManager.h"
+#include "World/WorldEventSpawnPoint.h"
 #include "World/TimeManager.h"
 #include "World/NPCActor.h"
 #include "World/WorldItem.h"
@@ -16,6 +17,13 @@ AWorldEventManager::AWorldEventManager()
 void AWorldEventManager::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (bSpawnOnStart)
+	{
+		FTimerHandle StartupTimer;
+		GetWorldTimerManager().SetTimer(StartupTimer, this, &AWorldEventManager::RollEvents, SpawnOnStartDelay, false);
+		UE_LOG(LogTemp, Log, TEXT("[WorldEventManager] bSpawnOnStart=true — will fire in %.1fs."), SpawnOnStartDelay);
+	}
 
 	// Find the ATimeManager in the world and bind to day/night transitions.
 	TArray<AActor*> Managers;
@@ -34,6 +42,7 @@ void AWorldEventManager::BeginPlay()
 		UE_LOG(LogTemp, Warning,
 			TEXT("[WorldEventManager] No ATimeManager found in the world — events will not fire."));
 	}
+
 }
 
 // ── Day/night callback ────────────────────────────────────────────────────────
@@ -67,6 +76,21 @@ void AWorldEventManager::RollEvents()
 		return;
 	}
 
+	// Rescan spawn points now so we pick up actors from whichever sublevel is currently loaded.
+	SpawnPoints.Reset();
+	TArray<AActor*> FoundPoints;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWorldEventSpawnPoint::StaticClass(), FoundPoints);
+	for (AActor* A : FoundPoints)
+	{
+		if (AWorldEventSpawnPoint* SP = Cast<AWorldEventSpawnPoint>(A))
+		{
+			SpawnPoints.Add(SP);
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("[WorldEventManager] %d spawn point(s) available for this night."), SpawnPoints.Num());
+	GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Cyan,
+		FString::Printf(TEXT("[WorldEventManager] Night — %d spawn point(s) found."), SpawnPoints.Num()));
+
 	const int32 Today = GetCurrentDay();
 
 	for (const FWorldEvent& Event : EventTable)
@@ -74,6 +98,7 @@ void AWorldEventManager::RollEvents()
 		if (Event.EventID.IsNone())
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[WorldEventManager] Skipping event with empty EventID."));
+			GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Red, TEXT("[WorldEventManager] Skipped entry: EventID is empty."));
 			continue;
 		}
 
@@ -85,12 +110,19 @@ void AWorldEventManager::RollEvents()
 				UE_LOG(LogTemp, Verbose,
 					TEXT("[WorldEventManager] '%s' on cooldown (%d/%d days)."),
 					*Event.EventID.ToString(), Today - *LastDay, Event.MinDaysBetween);
+				GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Yellow,
+					FString::Printf(TEXT("[WorldEventManager] '%s' on cooldown (%d/%d days)."),
+						*Event.EventID.ToString(), Today - *LastDay, Event.MinDaysBetween));
 				continue;
 			}
 		}
 
 		// Chance roll.
-		if (FMath::FRand() > Event.SpawnChance) continue;
+		const float Roll = FMath::FRand();
+		GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::White,
+			FString::Printf(TEXT("[WorldEventManager] '%s' rolled %.2f (need <= %.2f)."),
+				*Event.EventID.ToString(), Roll, Event.SpawnChance));
+		if (Roll > Event.SpawnChance) continue;
 
 		// Mark fired.
 		LastFiredDay.Add(Event.EventID, Today);
@@ -154,7 +186,7 @@ void AWorldEventManager::SpawnTravellingTrader(const FWorldEvent& Event, ABaseCh
 	Params.SpawnCollisionHandlingOverride =
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	const FVector SpawnLoc = GetScatterLocation(Player->GetActorLocation());
+	const FVector SpawnLoc = GetSpawnLocation(Player->GetActorLocation());
 	ActiveTrader = GetWorld()->SpawnActor<ANPCActor>(Event.TraderClass, SpawnLoc, FRotator::ZeroRotator, Params);
 
 	if (ActiveTrader)
@@ -162,6 +194,15 @@ void AWorldEventManager::SpawnTravellingTrader(const FWorldEvent& Event, ABaseCh
 		UE_LOG(LogTemp, Log,
 			TEXT("[WorldEventManager] TravellingTrader '%s' spawned at X=%.0f."),
 			*Event.EventID.ToString(), SpawnLoc.X);
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green,
+			FString::Printf(TEXT("[WorldEventManager] Trader spawned at (%.0f, %.0f, %.0f)."),
+				SpawnLoc.X, SpawnLoc.Y, SpawnLoc.Z));
+	}
+	else
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red,
+			FString::Printf(TEXT("[WorldEventManager] Trader FAILED to spawn at (%.0f, %.0f, %.0f)."),
+				SpawnLoc.X, SpawnLoc.Y, SpawnLoc.Z));
 	}
 }
 
@@ -184,7 +225,7 @@ void AWorldEventManager::SpawnScavengerRaid(const FWorldEvent& Event, ABaseChara
 	int32 Spawned = 0;
 	for (int32 i = 0; i < Count; ++i)
 	{
-		const FVector SpawnLoc = GetScatterLocation(Player->GetActorLocation());
+		const FVector SpawnLoc = GetSpawnLocation(Player->GetActorLocation());
 		if (GetWorld()->SpawnActor<ACharacter>(Event.EnemyClass, SpawnLoc, FRotator::ZeroRotator, Params))
 		{
 			++Spawned;
@@ -194,6 +235,8 @@ void AWorldEventManager::SpawnScavengerRaid(const FWorldEvent& Event, ABaseChara
 	UE_LOG(LogTemp, Log,
 		TEXT("[WorldEventManager] ScavengerRaid '%s' — %d/%d enemies spawned."),
 		*Event.EventID.ToString(), Spawned, Count);
+	GEngine->AddOnScreenDebugMessage(-1, 10.f, Spawned > 0 ? FColor::Green : FColor::Red,
+		FString::Printf(TEXT("[WorldEventManager] Raid: %d/%d enemies spawned."), Spawned, Count));
 }
 
 void AWorldEventManager::SpawnSupplyCrate(const FWorldEvent& Event, ABaseCharacter* Player)
@@ -224,7 +267,7 @@ void AWorldEventManager::SpawnSupplyCrate(const FWorldEvent& Event, ABaseCharact
 			if (FMath::FRand() > Entry.DropChance) continue;
 
 			const int32 Qty = FMath::RandRange(Entry.MinCount, FMath::Max(Entry.MinCount, Entry.MaxCount));
-			const FVector SpawnLoc = GetScatterLocation(Player->GetActorLocation());
+			const FVector SpawnLoc = GetSpawnLocation(Player->GetActorLocation());
 
 			AWorldItem* Item = GetWorld()->SpawnActor<AWorldItem>(
 				AWorldItem::StaticClass(), SpawnLoc, FRotator::ZeroRotator, Params);
@@ -241,6 +284,8 @@ void AWorldEventManager::SpawnSupplyCrate(const FWorldEvent& Event, ABaseCharact
 	UE_LOG(LogTemp, Log,
 		TEXT("[WorldEventManager] SupplyCrate '%s' — %d items spawned (%d rolls)."),
 		*Event.EventID.ToString(), Spawned, Rolls);
+	GEngine->AddOnScreenDebugMessage(-1, 10.f, Spawned > 0 ? FColor::Green : FColor::Red,
+		FString::Printf(TEXT("[WorldEventManager] Crate: %d items spawned (%d rolls)."), Spawned, Rolls));
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -250,10 +295,27 @@ ABaseCharacter* AWorldEventManager::GetPlayerCharacter() const
 	return Cast<ABaseCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
 }
 
-FVector AWorldEventManager::GetScatterLocation(const FVector& Origin) const
+FVector AWorldEventManager::GetSpawnLocation(const FVector& Origin) const
 {
-	// 2D side-scroller: scatter only on the X axis. Y and Z stay at the player's position
-	// so spawned actors land on the same ground plane.
+	// Prefer a randomly chosen named spawn point placed in the level.
+	if (SpawnPoints.Num() > 0)
+	{
+		const int32 Idx = FMath::RandRange(0, SpawnPoints.Num() - 1);
+		if (SpawnPoints[Idx].Get())
+		{
+			const FVector Loc = SpawnPoints[Idx]->GetActorLocation();
+			GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Cyan,
+				FString::Printf(TEXT("[WorldEventManager] Using spawn point '%s' at (%.0f, %.0f, %.0f)."),
+					*SpawnPoints[Idx]->SpawnPointID.ToString(), Loc.X, Loc.Y, Loc.Z));
+			return Loc;
+		}
+	}
+
+	// Fallback: scatter on the X axis around Origin (same as before).
 	const float OffsetX = FMath::FRandRange(-SpawnScatterRadius, SpawnScatterRadius);
-	return FVector(Origin.X + OffsetX, Origin.Y, Origin.Z);
+	const FVector Fallback = FVector(Origin.X + OffsetX, Origin.Y, Origin.Z);
+	GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Yellow,
+		FString::Printf(TEXT("[WorldEventManager] No spawn points — using fallback at (%.0f, %.0f, %.0f)."),
+			Fallback.X, Fallback.Y, Fallback.Z));
+	return Fallback;
 }

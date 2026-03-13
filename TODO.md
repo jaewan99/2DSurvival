@@ -13,7 +13,7 @@ Items are loosely ordered by priority / dependency.
 - [x] **Hotbar widget (C++)** — `UHotbarWidget` builds 6 slots dynamically in NativeConstruct (border + icon + key label). Gold highlight on active slot. Always visible at bottom of screen.
 - [x] **Dynamic hotbar slots** — start with 0, `HotbarBonus` on `UItemDefinition` grants slots (belt/jacket/bag). `ExpandHotbar`/`ShrinkHotbar` called by `OnInventoryChanged` recalculation.
 - [x] **Blueprint-customizable slot widget** — `UHotbarSlotWidget` base with `BindWidgetOptional` SlotIcon/SlotKeyLabel/ActiveHighlight; `OnSlotRefreshed` BlueprintImplementableEvent.
-- [ ] **Blueprint steps — Hotbar widget setup:**
+- [x] **Blueprint steps — Hotbar widget setup:**
   1. Create WBP_HotbarSlot (parent: `UHotbarSlotWidget`). Design freely. Optionally add: Image "SlotIcon", TextBlock "SlotKeyLabel", any Widget "ActiveHighlight".
   2. Create WBP_HotbarWidget (parent: `UHotbarWidget`). Add HorizontalBox named "SlotContainer". Set SlotWidgetClass = WBP_HotbarSlot in class defaults.
   3. Assign WBP_HotbarWidget to HotbarWidgetClass on BP_BaseCharacter (already done if previously set).
@@ -35,13 +35,13 @@ Items are loosely ordered by priority / dependency.
 
 - [x] **Door** — `ADoorActor` (C++ AActor + IInteractable). `DoorMesh` (BlockAll closed / NoCollision open), `InteractionBox`, `bIsLocked`, `bStartOpen`. Prompt reads "Open Door" / "Close Door" / "Locked". Blueprint child `BP_DoorActor` (assign mesh).
 - [x] **Environmental hazard zones (C++)** — `AHazardZone` (C++ AActor): `UBoxComponent` trigger, configurable `EffectsToApply` (TArray<EStatusEffect>), `DirectDamagePerInterval` (raw body HP), `EffectInterval` (default 2 s), `SFX_Ambient` looping sound. On player enter: apply effects immediately + start interval timer + play ambient. On exit: clear timer + stop ambient (effects persist until cured). Blueprint children configure each hazard type via Details panel.
-- [ ] **Blueprint steps — Hazard zones** — Create a Blueprint child per hazard type (parent: `AHazardZone`):
+- [x] **Blueprint steps — Hazard zones** — Create a Blueprint child per hazard type (parent: `AHazardZone`):
   1. **`BP_FireHazard`** — `EffectsToApply = [Bleeding]`, `DirectDamagePerInterval = 5`. Assign a fire/flame mesh to the `Mesh` component. Assign a crackling fire sound to `SFX_Ambient`.
   2. **`BP_ToxicHazard`** — `EffectsToApply = [Poisoned]`, `DirectDamagePerInterval = 0`. Assign a gas cloud/particle mesh. Assign a hissing/bubbling sound to `SFX_Ambient`.
   3. **`BP_ColdHazard`** — `EffectsToApply = [Wet]`, `DirectDamagePerInterval = 0`. Assign a frost/mist mesh. Assign a wind/chill sound to `SFX_Ambient`.
   4. Resize the **`HazardBox`** component in each Blueprint's viewport to match the hazard's footprint.
   5. Place instances in any sublevel. Tune `EffectInterval` (lower = more aggressive) per variant in class defaults.
-- [ ] **Blueprint steps — Sound effects** — Assign Sound Wave / Sound Cue assets in the editor (all EditDefaultsOnly, no C++ changes needed):
+- [x] **Blueprint steps — Sound effects** — Assign Sound Wave / Sound Cue assets in the editor (all EditDefaultsOnly, no C++ changes needed):
   - **BP_BaseCharacter** Details → Sound: `SFX_Interact`, `SFX_InventoryOpen`, `SFX_InventoryClose`, `SFX_CraftOpen`, `SFX_CraftClose`, `SFX_DialogueOpen`, `SFX_DialogueClose`, `SFX_HealthHUDToggle`
   - In **WBP_InventoryWidget** (or BP_BaseCharacter's `ToggleInventory` override): call `PlayUISound(SFX_InventoryOpen)` on open, `PlayUISound(SFX_InventoryClose)` on close
   - **BP_DoorActor** Details → Sound: `SFX_Open`, `SFX_Close`, `SFX_Locked`
@@ -91,7 +91,7 @@ Items are loosely ordered by priority / dependency.
 - [x] **Crafting component** — `UCraftingComponent` (C++) on the player: auto-scans all recipes + item defs via AssetRegistry. `CanCraft`, `TryCraft`, `FindItemDef` (public).
 - [x] **Crafting UI** — `UCraftingWidget` (C++ UUserWidget): left `ScrollBox` recipe list, right detail panel (output icon/name, ingredient rows with have/need color-coded, craft button, status text). Binds `OnInventoryChanged` to refresh craftability.
 - [x] **Item upgrading** — `UCraftingRecipe` gains optional `InputItemID` (FName) + `IsUpgradeRecipe()` helper. `CanCraft` also requires 1× InputItemID in inventory. `TryCraft` removes 1× InputItemID before consuming ingredients. Crafting widget: upgrade recipes prefixed with "↑ " in the list; base item shown in cyan at the top of the ingredient panel with a separator line; status text says "Upgraded!" on success.
-- [ ] **Blueprint steps — Upgrade recipes** — Create a data asset per upgrade:
+- [x] **Blueprint steps — Upgrade recipes** — Create a data asset per upgrade:
   1. Right-click → Miscellaneous → Data Asset → **UCraftingRecipe**. Name it `DA_Recipe_Upgrade_<ItemName>` (e.g. `DA_Recipe_Upgrade_SteelSword`).
   2. Set **InputItemID** = the ItemID of the base item being consumed (e.g. `IronSword`).
   3. Set **Ingredients** = the additional materials required (e.g. SteelIngot×2).
@@ -123,12 +123,12 @@ Each "map" is a street or building sublevel streamed seamlessly. Exits are now n
 - [x] **Exit direction display** — `UStreetHUDWidget`: arrows shown for exits named `"Left"`, `"Right"`, `"Up"` by convention. Name exits this way to drive the default HUD arrows.
 - [x] **World map widget** — `UMapWidget` (C++ UUserWidget): BFS node graph from starting street, city-colored region backgrounds, grey street lines, amber highway lines drawn via `NativePaint`. Visited streets tracked in `UStreetManager::VisitedStreetIDs`. Toggle with M key. Blueprint child `WBP_MapWidget` (CanvasPanel "MapCanvas" + Button "CloseButton").
 - [x] **City system** — `UCityDefinition` (UDataAsset): CityID, CityName, MapColor. `UStreetDefinition` extended with `OwnerCity`, `bIsHighway`, `MapLabel`. `UStreetManager` tracks `CurrentCity`, `VisitedStreetIDs`, `StartingStreetDef`; broadcasts `OnCityChanged` on city transition. Map widget groups streets into colored city regions. Blueprint setup: create `DA_City_*` assets, set `OwnerCity` on each `DA_Street_*`, set `bIsHighway=true` on highway streets.
-- [ ] **Blueprint steps — Map widget** — Create Widget Blueprint `WBP_MapWidget` (parent: `UMapWidget`):
+- [x] **Blueprint steps — Map widget** — Create Widget Blueprint `WBP_MapWidget` (parent: `UMapWidget`):
   1. Root → Canvas Panel named **`MapCanvas`** (fill the widget area, 800×500 recommended)
   2. Add a **Button** named **`CloseButton`** anchored top-right
   3. Assign `MapWidgetClass = WBP_MapWidget` on **BP_BaseCharacter** Details panel → UI
   4. Press **M** in-game to test the map opens and closes
-- [ ] **Blueprint steps — City data** — Wire up the city system in the editor:
+- [x] **Blueprint steps — City data** — Wire up the city system in the editor:
   1. Right-click Content Browser → Miscellaneous → Data Asset → **UCityDefinition**. Create one per city (e.g. `DA_City_Riverside`, `DA_City_Downtown`). Set **CityID**, **CityName**, **MapColor** (unique hue per city).
   2. Open each **DA_Street_*** data asset. Set **OwnerCity** to the correct `DA_City_*`. Leave null for highway/wilderness streets.
   3. On highway connector streets (segments between cities) set **bIsHighway = true** and leave **OwnerCity** null.
@@ -143,7 +143,7 @@ NPCs with unique roles (drug dealer, father, young girl, etc.) that the player c
 - [x] **Dialogue widget** — `UDialogueWidget` (C++ UUserWidget): PortraitImage, NPCNameText, DialogueText, NextButton cycles lines, GiveItemButton (enabled when player has required items), CloseButton. Portrait set via FSlateBrush + SetResourceObject.
 - [x] **Give item flow** — CountItemByID → RemoveItemByID → TryAddItem reward → NotifyTradeCompleted → switch to PostTradeDialogue lines.
 - [x] **NPC state persistence** — `TSet<FName> CompletedNPCTrades` in `UTwoDSurvivalSaveGame`. Saved via GetAllActorsOfClass scan; restored at LoadGame.
-- [ ] **Blueprint steps — Dialogue widget** — Create Widget Blueprint `WBP_DialogueWidget` (parent: `UDialogueWidget`):
+- [x] **Blueprint steps — Dialogue widget** — Create Widget Blueprint `WBP_DialogueWidget` (parent: `UDialogueWidget`):
   1. Add **Image** named **`PortraitImage`** (left side, e.g. 128×128)
   2. Add **TextBlock** named **`NPCNameText`** (NPC name header)
   3. Add **TextBlock** named **`DialogueText`** (body, multi-line, wrapping on)
@@ -152,12 +152,12 @@ NPCs with unique roles (drug dealer, father, young girl, etc.) that the player c
   6. Add **TextBlock** named **`GiveItemLabel`** (shows "Item Name ×Count" — sits near GiveItemButton)
   7. Add **Button** named **`CloseButton`** (top-right ✕)
   8. Assign `DialogueWidgetClass = WBP_DialogueWidget` on **BP_BaseCharacter** Details panel → UI
-- [ ] **Blueprint steps — NPC data assets** — For each NPC:
+- [x] **Blueprint steps — NPC data assets** — For each NPC:
   1. Right-click → Miscellaneous → Data Asset → **UNPCDefinition**. Name it `DA_NPC_<Role>` (e.g. `DA_NPC_DrugDealer`).
   2. Set **NPCID** (stable FName, never rename), **NPCName**, **Portrait** (Texture2D).
   3. Fill **DialogueLines** array with the NPC's lines of dialogue.
   4. If this NPC trades: enable **bHasTradeOffer**, set **RequiredItem** + **RequiredCount**, set **RewardItem** + **RewardCount**, fill **PostTradeDialogue** lines (shown after trade).
-- [ ] **Blueprint steps — NPC actors** — For each NPC variant:
+- [x] **Blueprint steps — NPC actors** — For each NPC variant:
   1. Create Blueprint child of **ANPCActor** (e.g. `BP_NPC_DrugDealer`).
   2. Add a **Static Mesh Component** for the NPC's appearance.
   3. Set **NPCDef** = the matching `DA_NPC_*` asset in Details panel.
@@ -173,7 +173,7 @@ Player can place and pick up furniture/decorations inside their base.
 - [x] **Placement mode** — `ABaseCharacter::PlaceItem(SlotIndex, Inv)` (BlueprintCallable) enters mode: spawns ghost actor, positions it via mouse deprojection onto Y=PlayerY plane each Tick, snaps to `PlacementGridSize` (default 50 cm) on X and Z. `OverlapAnyTestByChannel` drives green/red tint via `PlacementValidMaterial`/`PlacementInvalidMaterial`. LMB confirms (calls `ConfirmPlacement`), Escape cancels.
 - [x] **Pick up** — Press E on a placed actor → `TryAddItem` → self-destroy (same pattern as `AWorldItem`). "Move" = pick up and immediately re-enter placement mode via context menu.
 - [x] **Persistence** — `FPlacedActorSaveData` struct (PlacementID + FSoftClassPath + Transform + ItemDefID) in `UTwoDSurvivalSaveGame::PlacedActors`. SaveGame scans all `APlaceableActor`s (excluding ghosts); LoadGame destroys existing placed actors and respawns from save data.
-- [ ] **Blueprint steps — Placeable items:**
+- [x] **Blueprint steps — Placeable items:**
   1. Create two simple translucent materials in the Content Browser:
      - **`M_PlacementValid`** — translucent, green tint (BaseColor = green, Opacity ≈ 0.5).
      - **`M_PlacementInvalid`** — translucent, red tint (BaseColor = red, Opacity ≈ 0.5).
@@ -198,7 +198,7 @@ Tick-based debuffs applied to the player from wounds, environment, or enemy atta
 - [x] **Cure items** — `TArray<EStatusEffect> StatusEffectCures` on `UItemDefinition`. `UseItem_Implementation` iterates and removes. E.g. Bandage={Bleeding}, Antibiotics={Infected}, Antidote={Poisoned}, Splint={BrokenBone}, HotSoup={Frostbite,Hypothermia,Wet}, Painkillers={Concussion}.
 - [x] **Status HUD** — `UStatusEffectWidget` (C++): `BindWidget EffectContainer` (VerticalBox). Shows red TextBlock per active effect, collapsed when empty. `OnEffectsRefreshed` BlueprintImplementableEvent.
 - [x] **Save/load** — `TArray<FActiveStatusEffect> SavedStatusEffects` in SaveGame. Wet excluded (re-derived from weather on next tick).
-- [ ] **Blueprint steps — Status Effects:**
+- [x] **Blueprint steps — Status Effects:**
   1. Create Widget Blueprint **`WBP_StatusEffects`** (parent: `UStatusEffectWidget`). Add VerticalBox named **`EffectContainer`**. Position it on-screen (e.g. top-left corner). Optionally override `OnEffectsRefreshed` to swap TextBlocks for custom icons.
   2. Assign **`StatusEffectWidgetClass = WBP_StatusEffects`** on **BP_BaseCharacter** Details panel → UI.
   3. Create cure item data assets: **`DA_Bandage`** (Consumable, `StatusEffectCures = [Bleeding]`), **`DA_Antibiotics`** (`[Infected]`), **`DA_Antidote`** (`[Poisoned]`), **`DA_Splint`** (`[BrokenBone]`), **`DA_HotSoup`** (`[Frostbite, Hypothermia, Wet]`), **`DA_Painkillers`** (`[Concussion]`). Assign icons.
@@ -212,7 +212,7 @@ Equippable light source critical for nighttime exploration.
 - [x] **Battery item** — `BatteryRestoreAmount` float on `UItemDefinition` (Consumable). `UseItem_Implementation` calls `EquippedFlashlight->RefillBattery(Amount)` if flashlight is equipped.
 - [x] **Toggle** — selecting the same hotbar slot while flashlight is already equipped calls `Toggle()` instead of re-equipping. Dead battery blocks toggling on.
 - [x] **Enemy interaction** — `AEnemyBase::DetectPlayer` doubles `AggroRange` when enemy is within the flashlight's `OuterConeAngle`. Uses `AFlashlightActor::IsInCone()`.
-- [ ] **Blueprint steps — Flashlight:**
+- [x] **Blueprint steps — Flashlight:**
   1. Create socket **`FlashlightSocket`** on the character skeleton in the Skeleton editor (place near the hand/chest).
   2. Create Blueprint child **`BP_FlashlightActor`** (parent: `AFlashlightActor`). Tune the SpotLight component: Intensity, cone angles, attenuation radius, light color.
   3. Create item data asset **`DA_Flashlight`**: set `bIsFlashlight = true`, `FlashlightClass = BP_FlashlightActor`, assign an Icon.
@@ -224,7 +224,7 @@ Equippable light source critical for nighttime exploration.
 Backside-darkening effect — the character's back face appears dim and desaturated. C++ already pushes `CharacterForward` each tick; only material editor work remains.
 
 - [x] **C++ side** — `CharacterMIDs` created in `BeginPlay`; `CharacterForward` vector pushed via MID every `Tick`.
-- [ ] **Blueprint steps — Sight Environment material** — Open the character's material in the Material Editor:
+- [x] **Blueprint steps — Sight Environment material** — Open the character's material in the Material Editor:
   1. Add a **Vector Parameter** node named **`CharacterForward`**, default value `(1, 0, 0, 0)`.
   2. Compute **BackFactor**: `VertexNormalWS` → `Dot Product` (with CharacterForward) → `Negate` → `Clamp(0, 1)`.
   3. Darken back: `Multiply(BaseColor, 0.15)` → `Lerp(A=BaseColor, B=darkened, Alpha=BackFactor)` → call this **DimColor**.
@@ -243,7 +243,7 @@ Randomised weather states that layer on top of the day/night cycle, affecting vi
 - [x] **Shelter detection** — `bIsIndoors` on `UNeedsComponent` set by `ABuildingEntrance` on enter/exit. Weather thirst/mood effects skip when indoors.
 - [x] **Save/load** — `SavedWeatherState` + `SavedWeatherElapsed` in `UTwoDSurvivalSaveGame`. Restored via `AWeatherManager::RestoreWeather()` on load.
 - [x] **Calendar system** — `ATimeManager` gains `CurrentDay/Month/Year`, `DaysPerMonth` (default 30), `ESeason` enum (Spring months 1–3, Summer 4–6, Fall 7–9, Winter 10–12). `OnDayChanged` delegate fires each midnight wrap. `GetDateText()` / `GetCurrentSeason()` / `SetCalendar()` public API. Calendar saved/loaded via `SavedDay/Month/Year/TimeOfDay`.
-- [ ] **Blueprint steps — WeatherManager** — Set up the weather system in the editor:
+- [x] **Blueprint steps — WeatherManager** — Set up the weather system in the editor:
   1. Create Blueprint child **`BP_WeatherManager`** (parent: `AWeatherManager`). Place one instance in the persistent level.
   2. In **BP_WeatherManager** Details panel → Weather|Sound: assign **`SFX_Rain`**, **`SFX_HeavyRain`**, **`SFX_Snow`** sound assets (Sound Wave or Sound Cue).
   3. Optionally tune **`MinStateDurationSeconds`** / **`MaxStateDurationSeconds`** (defaults: 120 s / 600 s).
@@ -260,7 +260,7 @@ A personal notebook that auto-records NPC encounters and exchanges. Press J to o
 - [x] **`UJournalWidget` (C++)** — ScrollBox EntryList, `EntryWidgetClass` (EditDefaultsOnly), `RebuildEntries()` bound to `OnJournalUpdated`. Newest first.
 - [x] **J key toggle** — programmatic `IA_ToggleJournal` mapped to J. Shows/hides `UJournalWidget` instance. Follows same ShowUICursor/HideUICursor pattern.
 - [x] **Save/load** — `TArray<FJournalEntry> JournalEntries` in `UTwoDSurvivalSaveGame`.
-- [ ] **Blueprint steps — Journal widget:**
+- [x] **Blueprint steps — Journal widget:**
   1. Create Widget Blueprint **`WBP_JournalEntry`** (parent: `UJournalEntryWidget`). Add TextBlock **`DateText`** (small, grey) and TextBlock **`NoteText`** (main body, wrapping). Style freely. Override `OnEntryRefreshed` for custom per-note styling.
   2. Create Widget Blueprint **`WBP_JournalWidget`** (parent: `UJournalWidget`). Add ScrollBox named **`EntryList`** (fill the widget). Set **`EntryWidgetClass = WBP_JournalEntry`** in class defaults.
   3. Assign **`JournalWidgetClass = WBP_JournalWidget`** on **BP_BaseCharacter** Details panel → UI.
@@ -295,7 +295,7 @@ Passive progression that rewards consistent playstyle choices.
 - [ ] **XP sources** — Combat: `+15 XP` per enemy kill (bound to `AEnemyBase::OnDeath` via delegate). Crafting: `+10 XP` per successful craft (bound to `UCraftingComponent::OnCraftingChanged`). Scavenging: `+5 XP` per item pickup (in `AWorldItem::OnInteract`).
 - [ ] **Level bonuses** — Combat Lv2: +10% melee damage; Lv3: attack cooldown –15%. Crafting Lv2: unlocks a second tier of recipes (check `GetLevel(Crafting) >= 2` in `CanCraft`); Lv3: 10% chance to craft double output. Scavenging Lv2: +1 extra item roll on enemy loot tables; Lv3: `AWorldItem` pickup range +50%.
 - [x] **Skill HUD (C++)** — `USkillRowWidget` (SkillLabel, LevelText, XPBar, optional XPText; per-skill bar colors; `OnLevelUp` BlueprintImplementableEvent). `USkillHUDWidget` (3 rows + optional TitleBar drag handle; binds `OnSkillXPChanged`/`OnSkillLevelUp` delegates; refreshes only the changed row). Toggle with **K** key (programmatic `IA_ToggleSkillHUD`). Spawns at (50, 220) below the Health HUD default position.
-- [ ] **Blueprint steps — Skill HUD:**
+- [x] **Blueprint steps — Skill HUD:**
   1. Create Widget Blueprint **`WBP_SkillRow`** (parent: `USkillRowWidget`). Add: TextBlock **`SkillLabel`**, TextBlock **`LevelText`**, ProgressBar **`XPBar`**. Optionally add TextBlock **`XPText`** for "75 / 100" display. Style freely. Optionally override **`OnLevelUp`** to play a flash animation.
   2. Create Widget Blueprint **`WBP_SkillHUD`** (parent: `USkillHUDWidget`). Add three **`WBP_SkillRow`** instances named exactly **`Row_Combat`**, **`Row_Crafting`**, **`Row_Scavenging`**. Optionally add a Border named **`TitleBar`** at the top for drag-to-move.
   3. Assign **`SkillHUDWidgetClass = WBP_SkillHUD`** on **BP_BaseCharacter** Details panel → UI.
