@@ -8,6 +8,7 @@
 #include "BuildingDefinition.generated.h"
 
 class URoomDefinition;
+class ARoomCell;
 
 UENUM(BlueprintType)
 enum class EBuildingType : uint8
@@ -140,5 +141,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actors",
 		meta = (EditCondition = "bHasElevator"))
 	TSubclassOf<AActor> ElevatorRoomActorClass;
-	// Doors are placed inside each room Blueprint as Child Actor Components.
+
+	/**
+	 * Room cell spawned at ground floor, leftmost slot (slot 0).
+	 * Should have a door/entrance on its left wall facing the street.
+	 * If null, the slot falls back to the RoomPool.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actors")
+	TSubclassOf<ARoomCell> LeftEntranceActorClass;
+
+	/**
+	 * Room cell spawned at ground floor, rightmost slot (slot RoomsPerFloor-1).
+	 * Should have a door/entrance on its right wall facing the street.
+	 * If null, the slot falls back to the RoomPool.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Actors")
+	TSubclassOf<ARoomCell> RightEntranceActorClass;
 };

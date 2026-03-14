@@ -5,6 +5,8 @@
 #include "World/RoomDefinition.h"
 #include "World/RoomCell.h"
 #include "World/VerticalTransport.h"
+#include "World/BuildingInteriorVolume.h"
+#include "Components/BoxComponent.h"
 #include "Engine/World.h"
 #include "Math/RandomStream.h"
 
@@ -32,19 +34,19 @@ void ABuildingGenerator::Generate()
 		if (Actor) Actor->Destroy();
 	}
 	SpawnedActors.Empty();
+	SpawnedRoomCells.Empty();
+	InteriorVolume = nullptr;
 
 	const UBuildingDefinition* Def = BuildingDef;
-	const FVector Origin = GetActorLocation();
 
 	const int32 Seed = (Def->RandomSeed != 0) ? Def->RandomSeed : FMath::Rand();
 	FRandomStream Stream(Seed);
 
 	for (int32 Floor = 0; Floor < Def->FloorCount; Floor++)
 	{
-		const float LocalZ    = Floor * Def->FloorHeight;
+		const float LocalZ = Floor * Def->FloorHeight;
 		const bool  bTopFloor = (Floor == Def->FloorCount - 1);
 
-		// Clamp to last defined layout if FloorLayouts has fewer entries than FloorCount
 		const int32 LayoutIdx = FMath::Min(Floor, Def->FloorLayouts.Num() - 1);
 		const FFloorLayout* Layout = (LayoutIdx >= 0) ? &Def->FloorLayouts[LayoutIdx] : nullptr;
 
@@ -77,8 +79,9 @@ void ABuildingGenerator::Generate()
 		// --- Spawn rooms ---
 		for (int32 Room = 0; Room < Def->RoomsPerFloor; Room++)
 		{
-			const float   LocalX   = Room * Def->RoomWidth;
-			const FVector WorldPos = Origin + FVector(LocalX, 0.f, LocalZ);
+			const float   LocalX      = Room * Def->RoomWidth;
+			const FVector RotatedHoriz = GetActorRotation().RotateVector(FVector(LocalX, 0.f, 0.f));
+			const FVector WorldPos     = GetActorLocation() + RotatedHoriz + FVector(0.f, 0.f, LocalZ);
 			const bool    bIsStair = StairRooms.Contains(Room);
 			const bool    bIsElev  = Def->bHasElevator &&
 			                         FMath::IsNearlyEqual(LocalX, Def->ElevatorX, 1.f);
@@ -97,16 +100,42 @@ void ABuildingGenerator::Generate()
 				continue;
 			}
 
-			// Determine which category this slot requires
+			// Ground floor entrances — leftmost and rightmost slots are always doors.
+			if (Floor == 0)
+			{
+				const bool bIsLeft  = (Room == 0);
+				const bool bIsRight = (Room == Def->RoomsPerFloor - 1);
+
+				if (bIsLeft && Def->LeftEntranceActorClass)
+				{
+					AActor* Spawned = SpawnRoomAt(Def->LeftEntranceActorClass, WorldPos);
+					if (ARoomCell* Cell = Cast<ARoomCell>(Spawned))
+					{
+						Cell->SetRoomDimensions(Def->RoomWidth, Def->FloorHeight);
+						SpawnedRoomCells.Add(Cell);
+					}
+					continue;
+				}
+
+				if (bIsRight && Def->RightEntranceActorClass)
+				{
+					AActor* Spawned = SpawnRoomAt(Def->RightEntranceActorClass, WorldPos);
+					if (ARoomCell* Cell = Cast<ARoomCell>(Spawned))
+					{
+						Cell->SetRoomDimensions(Def->RoomWidth, Def->FloorHeight);
+						SpawnedRoomCells.Add(Cell);
+					}
+					continue;
+				}
+			}
+
 			ERoomCategory Required = ERoomCategory::Any;
 			if (Layout && Layout->SlotCategories.Num() > 0)
 			{
-				// Clamp to last defined slot if SlotCategories has fewer entries than RoomsPerFloor
 				const int32 SlotIdx = FMath::Min(Room, Layout->SlotCategories.Num() - 1);
 				Required = Layout->SlotCategories[SlotIdx];
 			}
 
-			// Filter RoomPool by category
 			TArray<URoomDefinition*> Candidates;
 			for (URoomDefinition* RoomDef : Def->RoomPool)
 			{
@@ -123,7 +152,6 @@ void ABuildingGenerator::Generate()
 				continue;
 			}
 
-			// Pick a random candidate and avoid repeating the same archetype twice in a row
 			URoomDefinition* Chosen = Candidates[Stream.RandRange(0, Candidates.Num() - 1)];
 
 			AActor* Spawned = SpawnRoomAt(Chosen->RoomActorClass, WorldPos);
@@ -131,7 +159,39 @@ void ABuildingGenerator::Generate()
 			{
 				RoomCell->SetRoomDimensions(Def->RoomWidth, Def->FloorHeight);
 				RoomCell->ApplyRoomDefinition(Chosen);
+				SpawnedRoomCells.Add(RoomCell);
 			}
+		}
+	}
+
+	// ── Spawn interior volume ─────────────────────────────────────────────────
+	// Covers all floors but NOT the rooftop — player on rooftop won't trigger "inside".
+	{
+		const float TotalWidth  = Def->RoomsPerFloor * Def->RoomWidth;
+		const float TotalHeight = Def->FloorCount * Def->FloorHeight;
+
+		// Rotate horizontal center, keep vertical center in world Z
+		const FVector RotatedHoriz = GetActorRotation().RotateVector(FVector(TotalWidth * 0.5f, 0.f, 0.f));
+		const FVector VolumeCenter = GetActorLocation() + RotatedHoriz + FVector(0.f, 0.f, TotalHeight * 0.5f);
+
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		ABuildingInteriorVolume* Vol = GetWorld()->SpawnActor<ABuildingInteriorVolume>(
+			ABuildingInteriorVolume::StaticClass(), VolumeCenter, GetActorRotation(), Params);
+
+		if (Vol)
+		{
+			if (!GetWorld()->IsGameWorld())
+				Vol->SetFlags(RF_Transient);
+
+			// Half-extents: X = half width, Y = generous depth for 2D side-scroller, Z = half height
+			Vol->GetTriggerBox()->SetBoxExtent(FVector(TotalWidth * 0.5f, 300.f, TotalHeight * 0.5f));
+			Vol->SetOwningGenerator(this);
+
+			InteriorVolume = Vol;
+			SpawnedActors.Add(Vol);
 		}
 	}
 
@@ -140,13 +200,21 @@ void ABuildingGenerator::Generate()
 		SpawnedActors.Num(), *GetName(), Def->FloorCount, Def->RoomsPerFloor, Seed);
 }
 
+void ABuildingGenerator::SetFacadesVisible(bool bVisible, float Duration)
+{
+	for (ARoomCell* Cell : SpawnedRoomCells)
+	{
+		if (Cell) Cell->SetFacadeVisible(bVisible, Duration);
+	}
+}
+
 AActor* ABuildingGenerator::SpawnRoomAt(TSubclassOf<AActor> ActorClass, FVector WorldPosition)
 {
 	FActorSpawnParameters Params;
 	Params.Owner = this;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AActor* Spawned = GetWorld()->SpawnActor<AActor>(ActorClass, WorldPosition, FRotator::ZeroRotator, Params);
+	AActor* Spawned = GetWorld()->SpawnActor<AActor>(ActorClass, WorldPosition, GetActorRotation(), Params);
 	if (Spawned)
 	{
 		if (!GetWorld()->IsGameWorld())

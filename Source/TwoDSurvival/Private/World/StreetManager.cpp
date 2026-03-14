@@ -7,6 +7,7 @@
 #include "GameFramework/PlayerController.h"
 #include "World/BuildingEntrance.h"
 #include "World/ExitSpawnPoint.h"
+#include "Character/BaseCharacter.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public
@@ -266,6 +267,15 @@ void UStreetManager::TeleportPlayerToSpawnPoint(ULevel* Level, FName IncomingExi
 					/*bSweep=*/false,
 					/*OutSweepHitResult=*/nullptr,
 					ETeleportType::TeleportPhysics);
+
+				// Align movement axis and camera to the spawn point's orientation.
+				// bFlipCamera toggles which side of the street the camera sits on.
+				if (ABaseCharacter* Char = Cast<ABaseCharacter>(PC->GetPawn()))
+				{
+					const float SpawnYaw = Spawn->GetActorRotation().Yaw;
+					const float CameraYaw = Spawn->bFlipCamera ? SpawnYaw + 90.f : SpawnYaw - 90.f;
+					Char->SetMovementAxis(Spawn->GetActorForwardVector(), CameraYaw);
+				}
 
 				UE_LOG(LogTemp, Log, TEXT("[StreetManager] Teleported player to spawn point '%s' at %s."),
 					*IncomingExitID.ToString(), *Spawn->GetActorLocation().ToString());

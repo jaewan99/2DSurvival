@@ -122,6 +122,34 @@ public:
 	void MoveRight(float Value);
 
 	/**
+	 * Sets the axis A/D movement travels along and updates the plane constraint to match.
+	 * Called by UStreetManager after teleporting the player to an AExitSpawnPoint — the
+	 * spawn point's forward vector becomes the new movement axis.
+	 * Default is FVector(1,0,0) — world X, standard side-scroller.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void SetMovementAxis(FVector NewAxis, float CameraYaw);
+
+	/** World-space direction that A/D moves along. Set via SetMovementAxis(). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
+	FVector MoveRightAxis = FVector(1.f, 0.f, 0.f);
+
+	// ── Camera vertical clamp ─────────────────────────────────────────────────
+
+	/**
+	 * World Z below which the camera target won't go.
+	 * Set this to the street/ground floor Z so the camera shifts up instead of
+	 * showing empty space below the ground when the player is on the lowest floor.
+	 * When the player is above this Z the camera centers on them normally.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	float MinCameraWorldZ = 0.f;
+
+	/** Smoothing speed for the vertical socket offset adjustment. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	float CameraVerticalLagSpeed = 6.f;
+
+	/**
 	 * Increments the UI-open counter and shows the mouse cursor when the first UI panel opens.
 	 * Call this whenever any overlay UI (inventory, crafting, health HUD, etc.) becomes visible.
 	 * Pair every ShowUICursor() call with a matching HideUICursor() call on close.
@@ -626,6 +654,10 @@ private:
 
 	// Last forward vector pushed to the materials — skips redundant updates.
 	FVector LastForwardForMaterial = FVector::ZeroVector;
+
+	// Cached spring arm — set in BeginPlay, used for camera vertical clamp in Tick.
+	UPROPERTY()
+	TObjectPtr<USpringArmComponent> CachedBoom;
 
 	// Active ghost actor while in placement mode. Null when not placing.
 	UPROPERTY()

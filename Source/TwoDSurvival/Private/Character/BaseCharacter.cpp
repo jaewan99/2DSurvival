@@ -194,6 +194,13 @@ void ABaseCharacter::BeginPlay()
 	// Store the default walk speed so leg damage can scale it relative to this base.
 	BaseWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
 
+	// Cache spring arm for Tick camera clamp.
+	CachedBoom = FindComponentByClass<USpringArmComponent>();
+
+	// Initialize camera and plane constraint to match the default movement axis.
+	// Default camera sits on the left side of +X movement (yaw = -90, looking along +Y).
+	SetMovementAxis(MoveRightAxis, -90.f);
+
 	// React to body part damage — adjust movement speed and trigger death.
 	HealthComponent->OnBodyPartDamaged.AddDynamic(this, &ABaseCharacter::OnBodyPartDamaged);
 
@@ -326,6 +333,21 @@ void ABaseCharacter::Tick(float DeltaTime)
 	const float Speed = GetVelocity().Size();
 	const float SpeedFraction = (BaseWalkSpeed > 0.f) ? (Speed / BaseWalkSpeed) : 0.f;
 	NoiseEmitterComponent->TickFootstep(DeltaTime, Speed > 10.f, SpeedFraction);
+
+	// ── Camera vertical clamp ─────────────────────────────────────────────────
+	// If the player is near/below MinCameraWorldZ (ground floor), shift the camera
+	// upward so the view doesn't show empty space below. Smoothly fades away as
+	// the player rises above the minimum floor level.
+	if (CachedBoom)
+	{
+		const float CharZ   = GetActorLocation().Z;
+		const float Deficit = MinCameraWorldZ - CharZ; // positive when below min
+		const float Target  = FMath::Max(0.f, Deficit);
+
+		FVector Offset    = CachedBoom->SocketOffset;
+		Offset.Z          = FMath::FInterpTo(Offset.Z, Target, DeltaTime, CameraVerticalLagSpeed);
+		CachedBoom->SocketOffset = Offset;
+	}
 }
 
 void ABaseCharacter::Jump()
@@ -1568,12 +1590,40 @@ void ABaseCharacter::MoveRight(float Value)
 
 	if (FMath::Abs(Value) > KINDA_SMALL_NUMBER)
 	{
-		// Set controller rotation to face movement direction — the AnimBP reads from this
-		const float TargetYaw = (Value > 0.f) ? 0.f : 180.f;
+		const FVector Dir = (Value > 0.f) ? MoveRightAxis : -MoveRightAxis;
+
+		// Face movement direction — derive yaw from the axis so it works at any rotation
+		const float TargetYaw = FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X));
 		if (Controller)
 			Controller->SetControlRotation(FRotator(0.f, TargetYaw, 0.f));
-		// Move in the explicit world direction (not relative to character facing)
-		const FVector MoveDirection = (Value > 0.f) ? FVector(1.f, 0.f, 0.f) : FVector(-1.f, 0.f, 0.f);
-		AddMovementInput(MoveDirection, 1.f);
+
+		AddMovementInput(Dir, 1.f);
 	}
+}
+
+void ABaseCharacter::SetMovementAxis(FVector NewAxis, float CameraYaw)
+{
+	NewAxis.Z = 0.f;
+	NewAxis.Normalize();
+	if (NewAxis.IsNearlyZero()) return;
+
+	MoveRightAxis = NewAxis;
+
+	// Plane constraint normal is perpendicular to the movement axis in the horizontal plane.
+	const FVector ConstraintNormal = FVector(-NewAxis.Y, NewAxis.X, 0.f);
+	GetCharacterMovement()->SetPlaneConstraintNormal(ConstraintNormal);
+
+	USpringArmComponent* Boom = FindComponentByClass<USpringArmComponent>();
+	if (!Boom) return;
+
+	Boom->bUsePawnControlRotation = false;
+	Boom->bInheritPitch = false;
+	Boom->bInheritYaw   = false;
+	Boom->bInheritRoll  = false;
+	// Absolute rotation ensures the spring arm tick never recalculates
+	// rotation relative to the parent (character), locking the camera in world space.
+	Boom->SetUsingAbsoluteRotation(true);
+
+	const float CurrentPitch = Boom->GetRelativeRotation().Pitch;
+	Boom->SetRelativeRotation(FRotator(CurrentPitch, CameraYaw, 0.f));
 }

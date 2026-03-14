@@ -39,6 +39,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawn")
 	FName SpawnID = NAME_None;
 
+	/**
+	 * Which side of the movement axis the camera sits on.
+	 * false = camera on the left side  (spawn yaw - 90)
+	 * true  = camera on the right side (spawn yaw + 90)
+	 * Rotate the spawn point to face the movement direction, then toggle this
+	 * to pick which side the camera looks from.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Spawn")
+	bool bFlipCamera = false;
+
 #if WITH_EDITORONLY_DATA
 	// Arrow shown in the editor viewport to make the spawn point easy to locate and orient.
 	UPROPERTY()

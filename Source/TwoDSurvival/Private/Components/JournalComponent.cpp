@@ -2,6 +2,7 @@
 
 #include "Components/JournalComponent.h"
 #include "World/NPCDefinition.h"
+#include "Inventory/ItemDefinition.h"
 #include "World/TimeManager.h"
 #include "Kismet/GameplayStatics.h"
 
