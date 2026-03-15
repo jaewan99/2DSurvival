@@ -201,6 +201,13 @@ void ABaseCharacter::BeginPlay()
 	// Default camera sits on the left side of +X movement (yaw = -90, looking along +Y).
 	SetMovementAxis(MoveRightAxis, -90.f);
 
+	// Apply Blueprint-configurable pitch now that defaults are loaded.
+	if (CachedBoom)
+	{
+		const FRotator R = CachedBoom->GetRelativeRotation();
+		CachedBoom->SetRelativeRotation(FRotator(CameraPitch, R.Yaw, 0.f));
+	}
+
 	// React to body part damage — adjust movement speed and trigger death.
 	HealthComponent->OnBodyPartDamaged.AddDynamic(this, &ABaseCharacter::OnBodyPartDamaged);
 

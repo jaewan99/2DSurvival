@@ -149,6 +149,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	float CameraVerticalLagSpeed = 6.f;
 
+	/** Pitch of the spring arm in degrees. Positive = camera elevated above character, looking down.
+	 *  Adjust in BP_BaseCharacter defaults. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera")
+	float CameraPitch = 15.f;
+
 	/**
 	 * Increments the UI-open counter and shows the mouse cursor when the first UI panel opens.
 	 * Call this whenever any overlay UI (inventory, crafting, health HUD, etc.) becomes visible.
