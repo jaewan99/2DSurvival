@@ -30,7 +30,7 @@ public:
 
 	// Intensity when the light is on.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
-	float LightIntensity = 2000.f;
+	float LightIntensity = 32000.f;
 
 	// Warm yellow by default — tweak per light in the Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")

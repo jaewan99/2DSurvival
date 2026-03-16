@@ -15,6 +15,11 @@ AStreetLight::AStreetLight()
 
 	Light = CreateDefaultSubobject<UPointLightComponent>(TEXT("Light"));
 	Light->SetupAttachment(Mesh);
+	Light->SetCastShadows(true);
+	Light->SetMobility(EComponentMobility::Movable);
+
+	// The pole mesh must not cast shadows — otherwise it occludes its own light source.
+	Mesh->SetCastShadow(false);
 }
 
 void AStreetLight::BeginPlay()
@@ -42,7 +47,6 @@ void AStreetLight::OnDayPhaseChanged(bool bIsNight)
 
 void AStreetLight::SetLightOn(bool bOn)
 {
-	Light->SetVisibility(bOn);
 	Light->SetIntensity(bOn ? LightIntensity : 0.f);
 	Light->SetLightColor(LightColor);
 }
