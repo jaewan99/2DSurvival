@@ -163,6 +163,11 @@ public:
 	UPROPERTY()
 	TArray<int32> SavedSkillXP;
 
+	// --- Crafting ---
+	// Recipe IDs the player has learned by reading books/schematics/magazines.
+	UPROPERTY()
+	TSet<FName> LearnedRecipeIDs;
+
 	// --- Placed actors ---
 	// All APlaceableActor instances the player has confirmed in the world.
 	// Ghost actors (bIsGhost=true) are excluded.

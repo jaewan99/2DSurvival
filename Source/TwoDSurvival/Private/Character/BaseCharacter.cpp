@@ -524,6 +524,9 @@ void ABaseCharacter::ToggleCrafting_Implementation()
 		if (CraftingWidgetInstance)
 		{
 			CraftingWidgetInstance->AddToViewport(5);
+			const FVector2D CraftPos(400.f, 150.f);
+			CraftingWidgetInstance->SetPositionInViewport(CraftPos, false);
+			CraftingWidgetInstance->InitDragPosition(CraftPos);
 			ShowUICursor();
 			PlayUISound(SFX_CraftOpen);
 		}
@@ -630,6 +633,19 @@ void ABaseCharacter::UseItem_Implementation(int32 SlotIndex, UInventoryComponent
 
 	FInventorySlot Slot = FromInventory->GetSlot(SlotIndex);
 	if (Slot.IsEmpty() || !Slot.ItemDef) return;
+
+	// Readable items (books, schematics, magazines) — teach recipes, then consume.
+	if (Slot.ItemDef->ItemCategory == EItemCategory::Readable)
+	{
+		if (CraftingComponent && !Slot.ItemDef->RecipesToLearn.IsEmpty())
+		{
+			for (const FName& RecipeID : Slot.ItemDef->RecipesToLearn)
+				CraftingComponent->LearnRecipe(RecipeID);
+		}
+		FromInventory->RemoveItem(SlotIndex, 1);
+		return;
+	}
+
 	if (Slot.ItemDef->ItemCategory != EItemCategory::Consumable) return;
 
 	HealthComponent->RestoreHealth(EBodyPart::Body, Slot.ItemDef->HealthRestoreAmount);
@@ -896,6 +912,33 @@ void ABaseCharacter::TogglePauseMenu()
 	}
 }
 
+void ABaseCharacter::EnterDepthLayer(float TargetY)
+{
+	if (bIsInsideDepthBuilding) return;
+
+	// Save street Y for restoration on exit via entrance.
+	SavedStreetY = GetActorLocation().Y;
+
+	// Teleport the player to the interior Y layer.
+	// ABuildingInteriorVolume::OnBeginOverlap fires automatically and handles
+	// bIsInsideDepthBuilding, bIsIndoors, and facade visibility.
+	FVector Loc = GetActorLocation();
+	Loc.Y = TargetY;
+	SetActorLocation(Loc);
+}
+
+void ABaseCharacter::ExitDepthLayer()
+{
+	if (!bIsInsideDepthBuilding) return;
+
+	// Teleport back to the street Y layer.
+	// ABuildingInteriorVolume::OnEndOverlap fires automatically and handles
+	// bIsInsideDepthBuilding, bIsIndoors, and facade visibility.
+	FVector Loc = GetActorLocation();
+	Loc.Y = SavedStreetY;
+	SetActorLocation(Loc);
+}
+
 void ABaseCharacter::UpdatePlacementGhost()
 {
 	FVector TargetLocation;
@@ -1062,6 +1105,9 @@ void ABaseCharacter::SaveGame_Implementation()
 
 	// Skills
 	SkillComponent->GetSaveData(SaveObj->SavedSkillLevels, SaveObj->SavedSkillXP);
+
+	// Learned crafting recipes
+	SaveObj->LearnedRecipeIDs = CraftingComponent->LearnedRecipeIDs;
 
 	// Placed actors — skip ghost previews (bIsGhost=true).
 	SaveObj->PlacedActors.Empty();
@@ -1234,6 +1280,9 @@ void ABaseCharacter::LoadGame_Implementation()
 	{
 		SkillComponent->ApplySaveData(SaveObj->SavedSkillLevels, SaveObj->SavedSkillXP);
 	}
+
+	// Restore learned crafting recipes
+	CraftingComponent->LearnedRecipeIDs = SaveObj->LearnedRecipeIDs;
 
 	// Restore placed actors — destroy all existing placed actors first, then respawn from save.
 	TArray<AActor*> ExistingPlaced;

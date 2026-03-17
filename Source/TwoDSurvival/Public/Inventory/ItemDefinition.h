@@ -103,6 +103,18 @@ public:
 		meta = (EditCondition = "ItemCategory == EItemCategory::Weapon"))
 	TSubclassOf<AWeaponBase> WeaponActorClass;
 
+	// --- Readable (books, magazines, schematics) ---
+
+	/**
+	 * Recipe IDs unlocked when this item is used (read).
+	 * Set ItemCategory = Readable. On use, each RecipeID is taught to the player's CraftingComponent
+	 * and the item is removed from inventory.
+	 * Example: DA_Book_WoodworkingManual → RecipesToLearn = ["Recipe_WoodenChair", "Recipe_WoodenTable"]
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Readable",
+		meta = (EditCondition = "ItemCategory == EItemCategory::Readable"))
+	TArray<FName> RecipesToLearn;
+
 	// --- Placeable ---
 
 	/**

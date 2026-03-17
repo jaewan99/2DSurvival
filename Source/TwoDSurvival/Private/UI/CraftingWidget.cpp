@@ -8,6 +8,7 @@
 #include "Inventory/InventoryComponent.h"
 #include "Inventory/ItemDefinition.h"
 #include "Character/BaseCharacter.h"
+#include "Components/SkillComponent.h"
 #include "Components/ScrollBox.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -27,8 +28,11 @@ void UCraftingWidget::NativeConstruct()
 
 	CraftingComp  = Player->CraftingComponent;
 	InventoryComp = Player->InventoryComponent;
+	SkillComp     = Player->SkillComponent;
 
 	if (!CraftingComp || !InventoryComp) return;
+
+	SetTitle(FText::FromString(TEXT("Crafting")));
 
 	// Refresh craftability whenever inventory changes (picking up items, etc.)
 	InventoryComp->OnInventoryChanged.AddDynamic(this, &UCraftingWidget::OnInventoryChanged);
@@ -50,17 +54,30 @@ void UCraftingWidget::BuildRecipeList()
 
 	RecipeScrollBox->ClearChildren();
 
+	const int32 CraftLevel = SkillComp ? SkillComp->GetLevel(ESkillType::Crafting) : 1;
+
 	for (UCraftingRecipe* Recipe : CraftingComp->AllRecipes)
 	{
 		if (!Recipe) continue;
 
+		// Hide recipes that require reading a book/schematic if the player hasn't learned them yet.
+		if (Recipe->bRequiresLearning && !CraftingComp->IsRecipeLearned(Recipe->RecipeID))
+			continue;
+
+		const bool bLevelLocked = Recipe->MinCraftingLevel > CraftLevel;
+
 		UItemDefinition* OutputDef = CraftingComp->FindItemDef(Recipe->OutputItemID);
 		FText BaseName = OutputDef ? OutputDef->DisplayName : FText::FromName(Recipe->OutputItemID);
-		// Prefix upgrade recipes with an arrow so they're visually distinct in the list.
-		FText RecipeName = Recipe->IsUpgradeRecipe()
-			? FText::FromString(FString::Printf(TEXT("↑ %s"), *BaseName.ToString()))
-			: BaseName;
-		bool bCanCraft = CraftingComp->CanCraft(Recipe, InventoryComp);
+
+		FText RecipeName;
+		if (bLevelLocked)
+			RecipeName = FText::FromString(FString::Printf(TEXT("[Lv %d] %s"), Recipe->MinCraftingLevel, *BaseName.ToString()));
+		else if (Recipe->IsUpgradeRecipe())
+			RecipeName = FText::FromString(FString::Printf(TEXT("↑ %s"), *BaseName.ToString()));
+		else
+			RecipeName = BaseName;
+
+		const bool bCanCraft = !bLevelLocked && CraftingComp->CanCraft(Recipe, InventoryComp);
 
 		UCraftingRecipeEntry* Entry = CreateWidget<UCraftingRecipeEntry>(GetOwningPlayer(), RecipeEntryClass);
 		if (Entry)
@@ -196,10 +213,20 @@ void UCraftingWidget::RefreshDetail()
 	}
 
 	// Craft button + status
-	const bool bCanCraft = CraftingComp->CanCraft(SelectedRecipe, InventoryComp);
-	if (CraftButton)     CraftButton->SetIsEnabled(bCanCraft);
-	if (CraftStatusText) CraftStatusText->SetText(FText::FromString(
-		bCanCraft ? TEXT("Ready to craft") : TEXT("Missing ingredients")));
+	const int32 CraftLevel = SkillComp ? SkillComp->GetLevel(ESkillType::Crafting) : 1;
+	const bool bLevelLocked = SelectedRecipe->MinCraftingLevel > CraftLevel;
+	const bool bCanCraft = !bLevelLocked && CraftingComp->CanCraft(SelectedRecipe, InventoryComp);
+
+	if (CraftButton) CraftButton->SetIsEnabled(bCanCraft);
+	if (CraftStatusText)
+	{
+		FString Status;
+		if (bLevelLocked)
+			Status = FString::Printf(TEXT("Requires Crafting Lv %d"), SelectedRecipe->MinCraftingLevel);
+		else
+			Status = bCanCraft ? TEXT("Ready to craft") : TEXT("Missing ingredients");
+		CraftStatusText->SetText(FText::FromString(Status));
+	}
 }
 
 // ---------------------------------------------------------

@@ -1,11 +1,9 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "World/BuildingEntrance.h"
-#include "World/StreetManager.h"
 #include "Character/BaseCharacter.h"
-#include "Components/NeedsComponent.h"
 #include "Components/BoxComponent.h"
-#include "Engine/GameInstance.h"
+#include "Kismet/GameplayStatics.h"
 
 ABuildingEntrance::ABuildingEntrance()
 {
@@ -18,43 +16,37 @@ ABuildingEntrance::ABuildingEntrance()
 	InteractionBox->SetGenerateOverlapEvents(true);
 }
 
+void ABuildingEntrance::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Extend the box Y to cover both the street layer and the interior layer so the player's
+	// detection sphere (radius 150) can reach it from either side.
+	const FVector Ext = InteractionBox->GetUnscaledBoxExtent();
+	InteractionBox->SetBoxExtent(FVector(Ext.X, InteriorY + 80.f, Ext.Z));
+}
+
 FText ABuildingEntrance::GetInteractionPrompt_Implementation()
 {
-	if (UGameInstance* GI = GetGameInstance())
+	if (ABaseCharacter* BC = Cast<ABaseCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0)))
 	{
-		if (UStreetManager* SM = GI->GetSubsystem<UStreetManager>())
-		{
-			return SM->bIsInsideBuilding
-				? FText::FromString(TEXT("Exit Building"))
-				: FText::FromString(TEXT("Enter Building"));
-		}
+		return BC->bIsInsideDepthBuilding
+			? FText::FromString(TEXT("Exit Building"))
+			: FText::FromString(TEXT("Enter Building"));
 	}
-	return FText::FromString(TEXT("Enter"));
+	return FText::FromString(TEXT("Enter Building"));
 }
 
 void ABuildingEntrance::OnInteract_Implementation(ABaseCharacter* Interactor)
 {
-	UGameInstance* GI = GetGameInstance();
-	if (!GI) return;
+	if (!Interactor) return;
 
-	UStreetManager* SM = GI->GetSubsystem<UStreetManager>();
-	if (!SM) return;
-
-	if (SM->bIsInsideBuilding)
+	if (Interactor->bIsInsideDepthBuilding)
 	{
-		// Inside the building — exit back to the street.
-		if (Interactor) Interactor->NeedsComponent->bIsIndoors = false;
-		SM->OnPlayerExitBuilding();
+		Interactor->ExitDepthLayer();
 	}
 	else
 	{
-		// On the street — enter the building via the named exit.
-		if (BuildingExitID.IsNone())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[BuildingEntrance] BuildingExitID is not set on '%s'."), *GetName());
-			return;
-		}
-		if (Interactor) Interactor->NeedsComponent->bIsIndoors = true;
-		SM->OnPlayerCrossedExit(BuildingExitID);
+		Interactor->EnterDepthLayer(InteriorY);
 	}
 }

@@ -67,6 +67,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Upgrade")
 	FName InputItemID;
 
+	/**
+	 * If true, this recipe is hidden from the crafting list until the player learns it
+	 * by reading a book, schematic, or magazine that has this RecipeID in its RecipesToLearn array.
+	 * Leave false for recipes always visible (gated only by MinCraftingLevel, if set).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting")
+	bool bRequiresLearning = false;
+
 	/** Returns true if this is an upgrade recipe (InputItemID is set). */
 	bool IsUpgradeRecipe() const { return !InputItemID.IsNone(); }
 };

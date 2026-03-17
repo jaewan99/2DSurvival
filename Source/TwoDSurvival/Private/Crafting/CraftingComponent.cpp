@@ -54,9 +54,26 @@ UItemDefinition* UCraftingComponent::FindItemDef(FName ItemID) const
 	return Found ? *Found : nullptr;
 }
 
+void UCraftingComponent::LearnRecipe(FName RecipeID)
+{
+	if (RecipeID.IsNone() || LearnedRecipeIDs.Contains(RecipeID)) return;
+	LearnedRecipeIDs.Add(RecipeID);
+	OnCraftingChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("CraftingComponent: learned recipe '%s'"), *RecipeID.ToString());
+}
+
+bool UCraftingComponent::IsRecipeLearned(FName RecipeID) const
+{
+	return LearnedRecipeIDs.Contains(RecipeID);
+}
+
 bool UCraftingComponent::CanCraft(UCraftingRecipe* Recipe, UInventoryComponent* Inventory) const
 {
 	if (!Recipe || !Inventory) return false;
+
+	// Learning gate — recipe must be read from a book/schematic first.
+	if (Recipe->bRequiresLearning && !LearnedRecipeIDs.Contains(Recipe->RecipeID))
+		return false;
 
 	// Crafting Lv2 gate — recipes with MinCraftingLevel > 1 require the skill level.
 	if (Recipe->MinCraftingLevel > 1)

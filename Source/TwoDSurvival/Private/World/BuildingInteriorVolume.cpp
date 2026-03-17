@@ -33,6 +33,7 @@ void ABuildingInteriorVolume::OnBeginOverlap(UPrimitiveComponent* OverlappedComp
 	if (!Player) return;
 
 	Player->NeedsComponent->bIsIndoors = true;
+	Player->bIsInsideDepthBuilding = true;
 	if (OwningGenerator) OwningGenerator->SetFacadesVisible(false);
 }
 
@@ -43,5 +44,6 @@ void ABuildingInteriorVolume::OnEndOverlap(UPrimitiveComponent* OverlappedComp, 
 	if (!Player) return;
 
 	Player->NeedsComponent->bIsIndoors = false;
+	Player->bIsInsideDepthBuilding = false;
 	if (OwningGenerator) OwningGenerator->SetFacadesVisible(true);
 }

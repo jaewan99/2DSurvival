@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Interaction/PropInteractionTypes.h"
 #include "WeaponBase.generated.h"
 
 class UStaticMeshComponent;
@@ -34,6 +35,11 @@ public:
 	// Base damage dealt by this weapon.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
 	float BaseDamage = 10.f;
+
+	// Tool type this weapon counts as for breaking props (UBreakableComponent checks this).
+	// Set to Hammer for a hammer weapon, Axe for an axe, etc. None = generic weapon.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
+	EToolType ToolType = EToolType::None;
 
 	// How long (seconds) the hitbox stays active per swing.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")

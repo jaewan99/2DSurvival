@@ -480,6 +480,28 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void TogglePauseMenu();
 
+	// ── Depth layer (building interiors) ───────────────────────────────────────
+
+	/** True while the player is inside a depth-layer building (Y shifted to interior). */
+	UPROPERTY(BlueprintReadOnly, Category = "Building")
+	bool bIsInsideDepthBuilding = false;
+
+	/**
+	 * Teleports the player to the interior Y layer of a building.
+	 * Saves the current street Y so ExitDepthLayer can restore it.
+	 * bIsInsideDepthBuilding and bIsIndoors are driven by ABuildingInteriorVolume overlap,
+	 * which fires automatically when the player lands at TargetY.
+	 * Called by ABuildingEntrance::OnInteract.
+	 */
+	void EnterDepthLayer(float TargetY);
+
+	/**
+	 * Teleports the player back to the saved street Y layer.
+	 * bIsInsideDepthBuilding and bIsIndoors are cleared by ABuildingInteriorVolume on exit overlap.
+	 * Called by ABuildingEntrance::OnInteract.
+	 */
+	void ExitDepthLayer();
+
 	// ── Placement mode ─────────────────────────────────────────────────────────
 
 	/**
@@ -662,6 +684,9 @@ private:
 
 	// Fired by Escape key — cancels placement mode if active, otherwise toggles pause menu.
 	void OnEscapePressed();
+
+	// Saved Y position on the street, restored when the player exits a depth-layer building via entrance.
+	float SavedStreetY = 0.f;
 
 	UFUNCTION()
 	void OnStatusEffectsChanged();

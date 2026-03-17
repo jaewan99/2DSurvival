@@ -3,11 +3,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "UI/InventoryWidget.h"
 #include "CraftingWidget.generated.h"
 
 class UCraftingComponent;
 class UInventoryComponent;
+class USkillComponent;
 class UCraftingRecipe;
 class UCraftingRecipeEntry;
 class UScrollBox;
@@ -33,7 +34,7 @@ class USoundBase;
  * Assign WBP_CraftingRecipeEntry to RecipeEntryClass in the widget's Class Defaults.
  */
 UCLASS()
-class TWODSURVIVAL_API UCraftingWidget : public UUserWidget
+class TWODSURVIVAL_API UCraftingWidget : public UInventoryWidget
 {
 	GENERATED_BODY()
 
@@ -82,6 +83,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UInventoryComponent> InventoryComp;
+
+	UPROPERTY()
+	TObjectPtr<USkillComponent> SkillComp;
 
 	UPROPERTY()
 	TObjectPtr<UCraftingRecipe> SelectedRecipe;

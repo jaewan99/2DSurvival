@@ -104,12 +104,31 @@ All widgets are C++ `UUserWidget` subclasses with Blueprint children for layout 
 - Mouse position: `Get Owning Player → Get Mouse Position On Viewport` + `Set Position in Viewport (bRemoveDPIScale: false)`
 - Button visibility is category-driven — read `ItemCategory` and `bCanBeEquipped` from the slot's `ItemDef` in Event Construct
 
+## Draggable Widget Pattern
+
+- All draggable windows have a C++ base class with `TitleBar` (UBorder, BindWidgetOptional) as the drag handle and `TitleText` (UTextBlock, BindWidgetOptional) for the label.
+- **Delta-based drag only** — accumulate `MouseDelta / DPI` into `WidgetViewportPos` each frame; call `SetPositionInViewport(WidgetViewportPos, false)`. Never read geometry to get position.
+- `InitDragPosition(FVector2D)` — call after `AddToViewport` / `SetPositionInViewport` with the same position. BlueprintCallable so Blueprint toggle functions can call it.
+- Gate drag start: check click is inside `TitleBar->GetCachedGeometry()` bounds before setting `bIsDragging`.
+- Mouse capture: `FReply::Handled().CaptureMouse(TakeWidget())` on start; `FReply::Handled().ReleaseMouseCapture()` on end.
+- Existing draggable widgets: `UHealthHUDWidget`, `UInventoryWidget`, `USkillHUDWidget`.
+
 ## UI Refresh Pattern
 
 - **Centralize refresh logic** — create ONE `RefreshAll()` function that updates all UI elements
 - **Use delegate bindings** — bind `OnInventoryChanged` / `OnHotbarChanged` / `OnBodyPartDamaged` directly to refresh functions via `AddDynamic` in `NativeConstruct`
 - **Avoid scattered manual refresh calls** — let delegate bindings handle updates automatically
 - This prevents stale UI bugs and makes the system easy to reason about
+
+## Prop Interaction Pattern
+
+- `AWorldProp` (AActor + IInteractable + IDamageable) — generic world prop. Add behavior components to give it interactions.
+- `UInteractionBehaviorComponent` — abstract base. `Priority` (higher wins), `RequiredTool`, `ActionLabel`. Virtuals: `GetPrompt`, `IsAvailable`, `CanInteract`, `Execute`, `GetInteractionType`, `GetInteractionDuration`.
+- `UBreakableComponent` — weapon damage gates on `RequiredTool` vs `AWeaponBase::ToolType`. `OnBroken` delegate → bind in Blueprint to unlock doors. `bDestroyOnDeath=false` + `BrokenMesh` for mesh-swap instead of destroy. Priority=10.
+- `UDisassembleComponent` — E-key (instant or hold) yields items + destroys actor. Priority=5.
+- **Adding a new behavior type**: subclass `UInteractionBehaviorComponent`, override virtuals. `AWorldProp::GetActiveBehavior()` picks it up automatically.
+- **Blueprint steps per prop**: 1 — create BP child of AWorldProp, assign mesh, fill component settings.
+- `EToolType` enum in `PropInteractionTypes.h` — None/Hammer/Axe/Crowbar. Set on `AWeaponBase::ToolType` (EditDefaultsOnly).
 
 ## Movement / Physics Notes
 

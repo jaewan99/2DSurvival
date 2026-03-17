@@ -46,6 +46,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Crafting")
 	UItemDefinition* FindItemDef(FName ItemID) const;
 
+	/**
+	 * Teaches the player a recipe that has bRequiresLearning=true.
+	 * Called by BaseCharacter::UseItem_Implementation when a Readable item is consumed.
+	 * No-ops if the recipe is already learned. Broadcasts OnCraftingChanged on success.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Crafting")
+	void LearnRecipe(FName RecipeID);
+
+	/** Returns true if the player has learned the given recipe. */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Crafting")
+	bool IsRecipeLearned(FName RecipeID) const;
+
+	// Set of recipe IDs the player has learned via readable items. Persisted in SaveGame.
+	UPROPERTY(BlueprintReadOnly, Category = "Crafting")
+	TSet<FName> LearnedRecipeIDs;
+
 protected:
 	virtual void BeginPlay() override;
 
