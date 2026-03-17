@@ -40,6 +40,7 @@ class USkillHUDWidget;
 class APlaceableActor;
 class UMaterialInterface;
 class UNoiseEmitterComponent;
+class UPauseMenuWidget;
 
 enum class EBodyPart : uint8;
 
@@ -465,9 +466,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<USkillHUDWidget> SkillHUDWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UPauseMenuWidget> PauseMenuWidgetClass;
+
 	void ToggleMap();
 	void ToggleJournal();
 	void ToggleSkillHUD();
+
+	/**
+	 * Opens or closes the pause menu. Also calls SetGamePaused.
+	 * Bound to Escape (when not in placement mode).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void TogglePauseMenu();
 
 	// ── Placement mode ─────────────────────────────────────────────────────────
 
@@ -645,6 +656,12 @@ private:
 
 	UPROPERTY()
 	USkillHUDWidget* SkillHUDInstance;
+
+	UPROPERTY()
+	UPauseMenuWidget* PauseMenuInstance;
+
+	// Fired by Escape key — cancels placement mode if active, otherwise toggles pause menu.
+	void OnEscapePressed();
 
 	UFUNCTION()
 	void OnStatusEffectsChanged();

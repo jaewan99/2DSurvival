@@ -45,6 +45,7 @@
 #include "World/PlaceableActor.h"
 #include "Materials/MaterialInterface.h"
 #include "Components/NoiseEmitterComponent.h"
+#include "UI/PauseMenuWidget.h"
 // DamageableInterface included via BaseCharacter.h
 
 ABaseCharacter::ABaseCharacter()
@@ -441,9 +442,9 @@ void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		if (IA_ToggleSkillHUD)
 			EIC->BindAction(IA_ToggleSkillHUD, ETriggerEvent::Started, this, &ABaseCharacter::ToggleSkillHUD);
 
-		// Placement cancel (Escape)
+		// Escape — cancels placement mode if active, otherwise opens/closes the pause menu
 		if (IA_PlaceCancel)
-			EIC->BindAction(IA_PlaceCancel, ETriggerEvent::Started, this, &ABaseCharacter::CancelPlacement);
+			EIC->BindAction(IA_PlaceCancel, ETriggerEvent::Started, this, &ABaseCharacter::OnEscapePressed);
 	}
 }
 
@@ -856,6 +857,43 @@ void ABaseCharacter::CancelPlacement()
 	bIsInPlacementMode     = false;
 
 	UE_LOG(LogTemp, Log, TEXT("[Placement] Placement cancelled."));
+}
+
+void ABaseCharacter::OnEscapePressed()
+{
+	if (bIsInPlacementMode)
+	{
+		CancelPlacement();
+	}
+	else
+	{
+		TogglePauseMenu();
+	}
+}
+
+void ABaseCharacter::TogglePauseMenu()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+
+	if (PauseMenuInstance)
+	{
+		PauseMenuInstance->RemoveFromParent();
+		PauseMenuInstance = nullptr;
+		HideUICursor();
+		UGameplayStatics::SetGamePaused(this, false);
+	}
+	else if (PauseMenuWidgetClass)
+	{
+		PauseMenuInstance = CreateWidget<UPauseMenuWidget>(PC, PauseMenuWidgetClass);
+		if (PauseMenuInstance)
+		{
+			PauseMenuInstance->SetOwnerCharacter(this);
+			PauseMenuInstance->AddToViewport(100);
+			ShowUICursor();
+			UGameplayStatics::SetGamePaused(this, true);
+		}
+	}
 }
 
 void ABaseCharacter::UpdatePlacementGhost()
