@@ -4,7 +4,10 @@
       "WebFetch(domain:dev.epicgames.com)",
       "Bash(xargs basename:*)",
       "Bash(ls D:/UnrealEngineGame/TwoDSurvival/*.md 2>/dev/null)",
-      "Bash(find \"C:\\\\Users\\\\antjw\" -maxdepth 5 -type d -iname \"*build*\" 2>/dev/null | head -20; find \"D:\\\\UnrealEngineGame\" -maxdepth 4 -type d -iname \"*build*\" 2>/dev/null | head -20)"
+      "Bash(find \"C:\\\\Users\\\\antjw\" -maxdepth 5 -type d -iname \"*build*\" 2>/dev/null | head -20; find \"D:\\\\UnrealEngineGame\" -maxdepth 4 -type d -iname \"*build*\" 2>/dev/null | head -20)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
