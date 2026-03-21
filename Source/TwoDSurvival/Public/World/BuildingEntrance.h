@@ -46,9 +46,24 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Building")
 	float InteriorY = 200.f;
 
+	/** Total duration of the fade-to-black transition (enter + exit combined). */
+	UPROPERTY(EditDefaultsOnly, Category = "Building")
+	float FadeTransitionDuration = 0.5f;
+
 	// IInteractable
 	virtual EInteractionType GetInteractionType_Implementation() override { return EInteractionType::Instant; }
 	virtual float GetInteractionDuration_Implementation() override { return 0.f; }
 	virtual FText GetInteractionPrompt_Implementation() override;
 	virtual void OnInteract_Implementation(ABaseCharacter* Interactor) override;
+
+private:
+	TWeakObjectPtr<ABaseCharacter> PendingInteractor;
+	bool bPendingEntering = false;
+	float PendingTargetY = 0.f;
+
+	FTimerHandle MidFadeTimer;
+	FTimerHandle EndFadeTimer;
+
+	void OnMidFade();
+	void OnFadeComplete();
 };
