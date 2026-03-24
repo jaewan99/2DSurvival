@@ -6,6 +6,7 @@
 #include "World/RoomCell.h"
 #include "World/VerticalTransport.h"
 #include "World/BuildingInteriorVolume.h"
+#include "World/BuildingFacadePanel.h"
 #include "Components/BoxComponent.h"
 #include "Engine/World.h"
 #include "Math/RandomStream.h"
@@ -34,7 +35,6 @@ void ABuildingGenerator::Generate()
 		if (Actor) Actor->Destroy();
 	}
 	SpawnedActors.Empty();
-	SpawnedRoomCells.Empty();
 	InteriorVolume = nullptr;
 
 	const UBuildingDefinition* Def = BuildingDef;
@@ -79,7 +79,7 @@ void ABuildingGenerator::Generate()
 		// --- Spawn rooms ---
 		for (int32 Room = 0; Room < Def->RoomsPerFloor; Room++)
 		{
-			const float   LocalX      = Room * Def->RoomWidth;
+			const float   LocalX       = Room * Def->RoomWidth;
 			const FVector RotatedHoriz = GetActorRotation().RotateVector(FVector(LocalX, 0.f, 0.f));
 			const FVector WorldPos     = GetActorLocation() + RotatedHoriz + FVector(0.f, 0.f, LocalZ);
 			const bool    bIsStair = StairRooms.Contains(Room);
@@ -110,10 +110,7 @@ void ABuildingGenerator::Generate()
 				{
 					AActor* Spawned = SpawnRoomAt(Def->LeftEntranceActorClass, WorldPos);
 					if (ARoomCell* Cell = Cast<ARoomCell>(Spawned))
-					{
-						Cell->SetRoomDimensions(Def->RoomWidth, Def->FloorHeight);
-						SpawnedRoomCells.Add(Cell);
-					}
+						Cell->SetRoomDimensions(Def->RoomWidth);
 					continue;
 				}
 
@@ -121,10 +118,7 @@ void ABuildingGenerator::Generate()
 				{
 					AActor* Spawned = SpawnRoomAt(Def->RightEntranceActorClass, WorldPos);
 					if (ARoomCell* Cell = Cast<ARoomCell>(Spawned))
-					{
-						Cell->SetRoomDimensions(Def->RoomWidth, Def->FloorHeight);
-						SpawnedRoomCells.Add(Cell);
-					}
+						Cell->SetRoomDimensions(Def->RoomWidth);
 					continue;
 				}
 			}
@@ -157,9 +151,40 @@ void ABuildingGenerator::Generate()
 			AActor* Spawned = SpawnRoomAt(Chosen->RoomActorClass, WorldPos);
 			if (ARoomCell* RoomCell = Cast<ARoomCell>(Spawned))
 			{
-				RoomCell->SetRoomDimensions(Def->RoomWidth, Def->FloorHeight);
+				RoomCell->SetRoomDimensions(Def->RoomWidth);
 				RoomCell->ApplyRoomDefinition(Chosen);
-				SpawnedRoomCells.Add(RoomCell);
+			}
+
+			// Spawn props from the room's PropSpawnTable.
+			for (const FRoomPropEntry& Entry : Chosen->PropSpawnTable)
+			{
+				if (!Entry.ActorClass) continue;
+				if (Entry.SpawnChance < 1.f && Stream.GetFraction() > Entry.SpawnChance) continue;
+
+				const FVector PropWorld = WorldPos + GetActorRotation().RotateVector(Entry.RelativeOffset);
+				SpawnRoomAt(Entry.ActorClass, PropWorld);
+			}
+		}
+	}
+
+	const float TotalWidth  = Def->RoomsPerFloor * Def->RoomWidth;
+	const float TotalHeight = Def->FloorCount * Def->FloorHeight;
+
+	// ── Spawn one facade panel per floor ──────────────────────────────────────
+	TArray<ABuildingFacadePanel*> FacadePanels;
+	if (FacadePanelClass)
+	{
+		for (int32 Floor = 0; Floor < Def->FloorCount; Floor++)
+		{
+			const float   LocalZ       = Floor * Def->FloorHeight;
+			const FVector RotatedHoriz = GetActorRotation().RotateVector(FVector(TotalWidth * 0.5f, 0.f, 0.f));
+			const FVector PanelPos     = GetActorLocation() + RotatedHoriz + FVector(0.f, 0.f, LocalZ);
+
+			AActor* Spawned = SpawnRoomAt(FacadePanelClass, PanelPos);
+			if (ABuildingFacadePanel* Panel = Cast<ABuildingFacadePanel>(Spawned))
+			{
+				Panel->InitPanel(Floor, TotalWidth, Def->FloorHeight);
+				FacadePanels.Add(Panel);
 			}
 		}
 	}
@@ -167,10 +192,6 @@ void ABuildingGenerator::Generate()
 	// ── Spawn interior volume ─────────────────────────────────────────────────
 	// Covers all floors but NOT the rooftop — player on rooftop won't trigger "inside".
 	{
-		const float TotalWidth  = Def->RoomsPerFloor * Def->RoomWidth;
-		const float TotalHeight = Def->FloorCount * Def->FloorHeight;
-
-		// Rotate horizontal center, keep vertical center in world Z
 		const FVector RotatedHoriz = GetActorRotation().RotateVector(FVector(TotalWidth * 0.5f, 0.f, 0.f));
 		const FVector VolumeCenter = GetActorLocation() + RotatedHoriz + FVector(0.f, 0.f, TotalHeight * 0.5f);
 
@@ -186,9 +207,8 @@ void ABuildingGenerator::Generate()
 			if (!GetWorld()->IsGameWorld())
 				Vol->SetFlags(RF_Transient);
 
-			// Half-extents: X = half width, Y = generous depth for 2D side-scroller, Z = half height
 			Vol->GetTriggerBox()->SetBoxExtent(FVector(TotalWidth * 0.5f, 300.f, TotalHeight * 0.5f));
-			Vol->SetOwningGenerator(this);
+			Vol->SetFacadePanels(FacadePanels, GetActorLocation().Z, Def->FloorHeight);
 
 			InteriorVolume = Vol;
 			SpawnedActors.Add(Vol);
@@ -198,14 +218,6 @@ void ABuildingGenerator::Generate()
 	UE_LOG(LogTemp, Log,
 		TEXT("[BuildingGenerator] Generated %d actors for '%s' (%d floors x %d rooms, seed %d)."),
 		SpawnedActors.Num(), *GetName(), Def->FloorCount, Def->RoomsPerFloor, Seed);
-}
-
-void ABuildingGenerator::SetFacadesVisible(bool bVisible, float Duration)
-{
-	for (ARoomCell* Cell : SpawnedRoomCells)
-	{
-		if (Cell) Cell->SetFacadeVisible(bVisible, Duration);
-	}
 }
 
 AActor* ABuildingGenerator::SpawnRoomAt(TSubclassOf<AActor> ActorClass, FVector WorldPosition)

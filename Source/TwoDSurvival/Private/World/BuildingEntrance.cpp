@@ -3,6 +3,7 @@
 #include "World/BuildingEntrance.h"
 #include "Character/BaseCharacter.h"
 #include "Components/BoxComponent.h"
+#include "Components/ArrowComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Camera/PlayerCameraManager.h"
 
@@ -15,16 +16,13 @@ ABuildingEntrance::ABuildingEntrance()
 	InteractionBox->SetBoxExtent(FVector(60.f, 60.f, 120.f));
 	InteractionBox->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
 	InteractionBox->SetGenerateOverlapEvents(true);
-}
 
-void ABuildingEntrance::BeginPlay()
-{
-	Super::BeginPlay();
-
-	// Extend the box Y to cover both the street layer and the interior layer so the player's
-	// detection sphere (radius 150) can reach it from either side.
-	const FVector Ext = InteractionBox->GetUnscaledBoxExtent();
-	InteractionBox->SetBoxExtent(FVector(Ext.X, InteriorY + 80.f, Ext.Z));
+	Destination = CreateDefaultSubobject<UArrowComponent>(TEXT("Destination"));
+	Destination->SetupAttachment(RootComponent);
+	Destination->ArrowColor = FColor(0, 200, 255);
+	Destination->ArrowSize = 2.f;
+	Destination->bIsScreenSizeScaled = true;
+	Destination->SetHiddenInGame(true);
 }
 
 FText ABuildingEntrance::GetInteractionPrompt_Implementation()
@@ -41,18 +39,11 @@ FText ABuildingEntrance::GetInteractionPrompt_Implementation()
 void ABuildingEntrance::OnInteract_Implementation(ABaseCharacter* Interactor)
 {
 	if (!Interactor) return;
-
-	// Guard against double-triggering while a transition is already running.
 	if (MidFadeTimer.IsValid() || EndFadeTimer.IsValid()) return;
 
 	PendingInteractor = Interactor;
-	bPendingEntering = !Interactor->bIsInsideDepthBuilding;
-	PendingTargetY = InteriorY;
-
-	// Lock movement for the duration of the transition.
 	Interactor->bMovementLocked = true;
 
-	// Fade to black over the first half of the transition duration.
 	const float HalfDuration = FadeTransitionDuration * 0.5f;
 	if (APlayerCameraManager* PCM = UGameplayStatics::GetPlayerCameraManager(this, 0))
 	{
@@ -67,17 +58,8 @@ void ABuildingEntrance::OnMidFade()
 	ABaseCharacter* Interactor = PendingInteractor.Get();
 	if (!Interactor) return;
 
-	// Do the teleport while the screen is fully black.
-	if (bPendingEntering)
-	{
-		Interactor->EnterDepthLayer(PendingTargetY);
-	}
-	else
-	{
-		Interactor->ExitDepthLayer();
-	}
+	Interactor->SetActorLocation(Destination->GetComponentLocation());
 
-	// Fade back in over the second half.
 	const float HalfDuration = FadeTransitionDuration * 0.5f;
 	if (APlayerCameraManager* PCM = UGameplayStatics::GetPlayerCameraManager(this, 0))
 	{
@@ -94,4 +76,6 @@ void ABuildingEntrance::OnFadeComplete()
 		Interactor->bMovementLocked = false;
 	}
 	PendingInteractor.Reset();
+	MidFadeTimer.Invalidate();
+	EndFadeTimer.Invalidate();
 }

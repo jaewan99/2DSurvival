@@ -9,9 +9,6 @@ void UPauseMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// Widget must tick and receive input even while the game is paused.
-	SetTickableWhenPaused(true);
-
 	if (ResumeButton) ResumeButton->OnClicked.AddDynamic(this, &UPauseMenuWidget::OnResumeClicked);
 	if (SaveButton)   SaveButton->OnClicked.AddDynamic(this,   &UPauseMenuWidget::OnSaveClicked);
 	if (LoadButton)   LoadButton->OnClicked.AddDynamic(this,   &UPauseMenuWidget::OnLoadClicked);

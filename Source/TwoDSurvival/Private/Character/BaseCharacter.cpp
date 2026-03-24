@@ -912,32 +912,6 @@ void ABaseCharacter::TogglePauseMenu()
 	}
 }
 
-void ABaseCharacter::EnterDepthLayer(float TargetY)
-{
-	if (bIsInsideDepthBuilding) return;
-
-	// Save street Y for restoration on exit via entrance.
-	SavedStreetY = GetActorLocation().Y;
-
-	// Teleport the player to the interior Y layer.
-	// ABuildingInteriorVolume::OnBeginOverlap fires automatically and handles
-	// bIsInsideDepthBuilding, bIsIndoors, and facade visibility.
-	FVector Loc = GetActorLocation();
-	Loc.Y = TargetY;
-	SetActorLocation(Loc);
-}
-
-void ABaseCharacter::ExitDepthLayer()
-{
-	if (!bIsInsideDepthBuilding) return;
-
-	// Teleport back to the street Y layer.
-	// ABuildingInteriorVolume::OnEndOverlap fires automatically and handles
-	// bIsInsideDepthBuilding, bIsIndoors, and facade visibility.
-	FVector Loc = GetActorLocation();
-	Loc.Y = SavedStreetY;
-	SetActorLocation(Loc);
-}
 
 void ABaseCharacter::UpdatePlacementGhost()
 {

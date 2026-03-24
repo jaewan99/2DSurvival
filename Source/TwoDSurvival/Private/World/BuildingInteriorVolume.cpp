@@ -1,14 +1,15 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "World/BuildingInteriorVolume.h"
-#include "World/BuildingGenerator.h"
+#include "World/BuildingFacadePanel.h"
 #include "Character/BaseCharacter.h"
 #include "Components/NeedsComponent.h"
 #include "Components/BoxComponent.h"
 
 ABuildingInteriorVolume::ABuildingInteriorVolume()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	TriggerBox = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerBox"));
 	SetRootComponent(TriggerBox);
@@ -20,9 +21,15 @@ ABuildingInteriorVolume::ABuildingInteriorVolume()
 	TriggerBox->OnComponentEndOverlap.AddDynamic(this, &ABuildingInteriorVolume::OnEndOverlap);
 }
 
-void ABuildingInteriorVolume::SetOwningGenerator(ABuildingGenerator* Generator)
+void ABuildingInteriorVolume::SetFacadePanels(const TArray<ABuildingFacadePanel*>& Panels,
+                                               float InBuildingBaseZ, float InFloorHeight)
 {
-	OwningGenerator = Generator;
+	FacadePanels.Reset();
+	for (ABuildingFacadePanel* P : Panels)
+		FacadePanels.Add(P);
+
+	BuildingBaseZ = InBuildingBaseZ;
+	FloorHeight   = FMath::Max(InFloorHeight, 1.f);
 }
 
 void ABuildingInteriorVolume::OnBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
@@ -34,7 +41,14 @@ void ABuildingInteriorVolume::OnBeginOverlap(UPrimitiveComponent* OverlappedComp
 
 	Player->NeedsComponent->bIsIndoors = true;
 	Player->bIsInsideDepthBuilding = true;
-	if (OwningGenerator) OwningGenerator->SetFacadesVisible(false);
+
+	if (FacadePanels.Num() > 0)
+	{
+		TrackedPlayer = Player;
+		ActiveFloor   = -1; // force UpdateFacadeForPlayer to apply on first call
+		UpdateFacadeForPlayer();
+		SetActorTickEnabled(true);
+	}
 }
 
 void ABuildingInteriorVolume::OnEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
@@ -45,5 +59,39 @@ void ABuildingInteriorVolume::OnEndOverlap(UPrimitiveComponent* OverlappedComp, 
 
 	Player->NeedsComponent->bIsIndoors = false;
 	Player->bIsInsideDepthBuilding = false;
-	if (OwningGenerator) OwningGenerator->SetFacadesVisible(true);
+
+	// Fade all panels back in.
+	for (ABuildingFacadePanel* Panel : FacadePanels)
+		if (Panel) Panel->SetFacadeVisible(true, 0.35f);
+
+	TrackedPlayer = nullptr;
+	ActiveFloor   = -1;
+	SetActorTickEnabled(false);
+}
+
+void ABuildingInteriorVolume::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	UpdateFacadeForPlayer();
+}
+
+void ABuildingInteriorVolume::UpdateFacadeForPlayer()
+{
+	if (!TrackedPlayer.IsValid() || FacadePanels.Num() == 0) return;
+
+	const float RelZ     = TrackedPlayer->GetActorLocation().Z - BuildingBaseZ;
+	const int32 NewFloor = FMath::Clamp(FMath::FloorToInt(RelZ / FloorHeight),
+	                                     0, FacadePanels.Num() - 1);
+
+	if (NewFloor == ActiveFloor) return;
+
+	// Fade previous floor back in.
+	if (ActiveFloor >= 0 && FacadePanels.IsValidIndex(ActiveFloor) && FacadePanels[ActiveFloor])
+		FacadePanels[ActiveFloor]->SetFacadeVisible(true, 0.35f);
+
+	// Fade new floor out.
+	if (FacadePanels.IsValidIndex(NewFloor) && FacadePanels[NewFloor])
+		FacadePanels[NewFloor]->SetFacadeVisible(false, 0.35f);
+
+	ActiveFloor = NewFloor;
 }

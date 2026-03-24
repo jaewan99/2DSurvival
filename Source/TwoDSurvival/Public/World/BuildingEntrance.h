@@ -8,22 +8,23 @@
 #include "BuildingEntrance.generated.h"
 
 class UBoxComponent;
+class UArrowComponent;
 
 /**
- * Press-E interactable placed at a building door.
+ * Press-E interactable placed at a building door — both outside and inside.
  *
- * Teleports the player between the street Y layer (0) and the building interior Y layer (InteriorY).
- * Does NOT manage indoors state or facade visibility — ABuildingInteriorVolume handles both
- * automatically for any entry path (door, roof jump, underground, etc.).
+ * Place two of these per doorway:
+ *   - One on the STREET side  — move its Destination component to just inside the door
+ *   - One on the INTERIOR side — move its Destination component to just outside the door
  *
- * Setup:
- *   - Place BP_BuildingEntrance at each door opening.
- *   - Set InteriorY to match the Y position of the interior geometry.
- *   - The InteractionBox auto-sizes in BeginPlay to cover both the street and interior layers.
+ * No separate spawn point actors needed. The Destination scene component IS the
+ * teleport target — drag it in the level editor to position it.
+ *
+ * ABuildingInteriorVolume handles bIsIndoors and facade fade automatically on overlap.
  *
  * Blueprint child (BP_BuildingEntrance):
  *   - Assign a door mesh
- *   - Set InteriorY in Defaults
+ *   - In the level, move the Destination component to the arrival position
  */
 UCLASS()
 class TWODSURVIVAL_API ABuildingEntrance : public AActor, public IInteractable
@@ -33,18 +34,16 @@ class TWODSURVIVAL_API ABuildingEntrance : public AActor, public IInteractable
 public:
 	ABuildingEntrance();
 
-	virtual void BeginPlay() override;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBoxComponent> InteractionBox;
 
 	/**
-	 * Y world position of the building interior layer.
-	 * Must match the Y coordinate of the interior geometry in the sublevel.
-	 * Adjust in BP_BuildingEntrance defaults.
+	 * Teleport destination — move this arrow in the level editor to position
+	 * where the player will appear after pressing E on this entrance.
+	 * The arrow direction shows which way the player will face on arrival.
 	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Building")
-	float InteriorY = 200.f;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UArrowComponent> Destination;
 
 	/** Total duration of the fade-to-black transition (enter + exit combined). */
 	UPROPERTY(EditDefaultsOnly, Category = "Building")
@@ -58,8 +57,6 @@ public:
 
 private:
 	TWeakObjectPtr<ABaseCharacter> PendingInteractor;
-	bool bPendingEntering = false;
-	float PendingTargetY = 0.f;
 
 	FTimerHandle MidFadeTimer;
 	FTimerHandle EndFadeTimer;

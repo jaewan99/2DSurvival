@@ -56,16 +56,49 @@ enum class ERoomCategory : uint8
 	Utility UMETA(DisplayName = "Utility"),
 };
 
+// ── Prop spawn entry ─────────────────────────────────────────────────────────
+
+/**
+ * One entry in a room's prop spawn table.
+ *
+ * The generator spawns ActorClass at (RoomOrigin + RelativeOffset) after placing
+ * the room cell. Use this to populate rooms with enemies, NPCs, containers,
+ * crafting tables, world props, etc. — no Blueprint changes needed per variant.
+ *
+ * RelativeOffset is in room-local space: X = along room width (left→right),
+ * Z = height above floor origin. Y is ignored (generator keeps everything on
+ * the street Y plane).
+ */
+USTRUCT(BlueprintType)
+struct FRoomPropEntry
+{
+	GENERATED_BODY()
+
+	/** Actor class to spawn (BP_EnemyBase, BP_NPCActor, BP_WoodPlanks, etc.). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSubclassOf<AActor> ActorClass;
+
+	/** Offset from the room origin in local space (X along width, Z height). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FVector RelativeOffset = FVector::ZeroVector;
+
+	/** 0–1 probability this entry spawns. 1 = always, 0.5 = 50% chance. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float SpawnChance = 1.f;
+};
+
 // ── Room definition ───────────────────────────────────────────────────────────
 
 /**
- * Defines one room archetype: category, Blueprint to spawn, and materials.
+ * Defines one room variant: category, Blueprint geometry, and prop contents.
  *
- * All props, lootables, and doors live inside the RoomActorClass Blueprint
- * as Child Actor Components — the generator does not spawn them separately.
+ * The room Blueprint (RoomActorClass) contains only geometry — walls, floor,
+ * ceiling, and facade. All variable content (enemies, NPCs, furniture, loot)
+ * is listed in PropSpawnTable so the same geometry Blueprint can be reused
+ * across many variants without duplicating Blueprints.
  *
- * Create one asset per archetype (e.g. DA_Room_Bedroom, DA_Room_Kitchen).
- * Add all relevant assets to UBuildingDefinition::RoomPool.
+ * Create one asset per room variant (e.g. DA_Room_Bedroom_Empty,
+ * DA_Room_Bedroom_WithEnemy). Add all relevant assets to UBuildingDefinition::RoomPool.
  */
 UCLASS(BlueprintType)
 class TWODSURVIVAL_API URoomDefinition : public UDataAsset
@@ -85,4 +118,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Room")
 	TSubclassOf<ARoomCell> RoomActorClass;
 
+	/**
+	 * Actors spawned inside this room after the room cell is placed.
+	 * Each entry specifies an actor class, a room-local offset, and a spawn chance.
+	 * Use this to add enemies, NPCs, containers, crafting tables, props, etc.
+	 * without baking them into the room Blueprint.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Props")
+	TArray<FRoomPropEntry> PropSpawnTable;
 };
