@@ -10,16 +10,15 @@ class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
 
 /**
- * One per building floor — spawned by ABuildingGenerator at the front face of the building.
- * Covers the full width of the floor with a single mesh that is auto-scaled on spawn.
+ * Single facade actor for the entire building front — spawned by ABuildingGenerator,
+ * auto-scaled to cover the full building width and total height.
  *
- * ABuildingInteriorVolume tracks which floor the player is on and fades only that panel,
- * so upper/lower floors stay visible while the player's current floor fades out.
+ * ABuildingInteriorVolume fades it out when the player enters and back in on exit.
  *
  * Blueprint child (BP_BuildingFacade):
  *   - Assign a mesh to FacadeMesh in the Details panel.
- *   - The mesh must use a translucent material with a scalar parameter named "FacadeOpacity".
- *   - MeshBaseExtent should match the mesh's width/height in cm (default 100 for UE's plane).
+ *   - Material must be translucent with a scalar parameter named "FacadeOpacity".
+ *   - Set MeshBaseExtent to match the mesh's base size in cm (default 100 = UE plane).
  */
 UCLASS()
 class TWODSURVIVAL_API ABuildingFacadePanel : public AActor
@@ -36,24 +35,19 @@ public:
 	/**
 	 * The unscaled width/height of the assigned mesh in cm.
 	 * Default 100 matches UE's built-in plane mesh.
-	 * Adjust if using a custom mesh with a different base size.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "Facade")
 	float MeshBaseExtent = 100.f;
 
-	/** Called by ABuildingGenerator after spawn. Scales the mesh to cover the floor. */
-	void InitPanel(int32 InFloorIndex, float Width, float Height);
+	/** Called by ABuildingGenerator after spawn. Scales the mesh to cover the full building. */
+	void InitPanel(float Width, float Height);
 
 	/** Fade in (bVisible=true) or out over Duration seconds. */
 	void SetFacadeVisible(bool bVisible, float Duration = 0.35f);
 
-	int32 GetFloorIndex() const { return FloorIndex; }
-
 	virtual void Tick(float DeltaTime) override;
 
 private:
-	int32 FloorIndex = 0;
-
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> FacadeMID;
 

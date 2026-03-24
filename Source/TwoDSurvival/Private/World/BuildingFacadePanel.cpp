@@ -14,16 +14,11 @@ ABuildingFacadePanel::ABuildingFacadePanel()
 	FacadeMesh->SetCollisionProfileName(TEXT("NoCollision"));
 }
 
-void ABuildingFacadePanel::InitPanel(int32 InFloorIndex, float Width, float Height)
+void ABuildingFacadePanel::InitPanel(float Width, float Height)
 {
-	FloorIndex = InFloorIndex;
-
-	// Scale the mesh so it covers the full floor width and height.
-	// MeshBaseExtent is the mesh's unscaled size in cm (100 = UE's default plane mesh).
 	const float Extent = FMath::Max(MeshBaseExtent, 1.f);
 	FacadeMesh->SetRelativeScale3D(FVector(Width / Extent, 1.f, Height / Extent));
-
-	// Offset up so the actor's origin sits at the floor base and the mesh centers on mid-floor.
+	// Offset up so the actor's origin sits at the building base and the mesh centers vertically.
 	FacadeMesh->SetRelativeLocation(FVector(0.f, 0.f, Height * 0.5f));
 }
 

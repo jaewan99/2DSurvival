@@ -170,22 +170,18 @@ void ABuildingGenerator::Generate()
 	const float TotalWidth  = Def->RoomsPerFloor * Def->RoomWidth;
 	const float TotalHeight = Def->FloorCount * Def->FloorHeight;
 
-	// ── Spawn one facade panel per floor ──────────────────────────────────────
-	TArray<ABuildingFacadePanel*> FacadePanels;
+	// ── Spawn a single facade panel covering the full building front ──────────
+	ABuildingFacadePanel* FacadePanel = nullptr;
 	if (FacadePanelClass)
 	{
-		for (int32 Floor = 0; Floor < Def->FloorCount; Floor++)
-		{
-			const float   LocalZ       = Floor * Def->FloorHeight;
-			const FVector RotatedHoriz = GetActorRotation().RotateVector(FVector(TotalWidth * 0.5f, 0.f, 0.f));
-			const FVector PanelPos     = GetActorLocation() + RotatedHoriz + FVector(0.f, 0.f, LocalZ);
+		const FVector RotatedHoriz = GetActorRotation().RotateVector(FVector(TotalWidth * 0.5f, 0.f, 0.f));
+		const FVector PanelPos     = GetActorLocation() + RotatedHoriz;
 
-			AActor* Spawned = SpawnRoomAt(FacadePanelClass, PanelPos);
-			if (ABuildingFacadePanel* Panel = Cast<ABuildingFacadePanel>(Spawned))
-			{
-				Panel->InitPanel(Floor, TotalWidth, Def->FloorHeight);
-				FacadePanels.Add(Panel);
-			}
+		AActor* Spawned = SpawnRoomAt(FacadePanelClass, PanelPos);
+		if (ABuildingFacadePanel* Panel = Cast<ABuildingFacadePanel>(Spawned))
+		{
+			Panel->InitPanel(TotalWidth, TotalHeight);
+			FacadePanel = Panel;
 		}
 	}
 
@@ -208,7 +204,7 @@ void ABuildingGenerator::Generate()
 				Vol->SetFlags(RF_Transient);
 
 			Vol->GetTriggerBox()->SetBoxExtent(FVector(TotalWidth * 0.5f, 300.f, TotalHeight * 0.5f));
-			Vol->SetFacadePanels(FacadePanels, GetActorLocation().Z, Def->FloorHeight);
+			Vol->SetFacadePanel(FacadePanel);
 
 			InteriorVolume = Vol;
 			SpawnedActors.Add(Vol);
