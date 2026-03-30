@@ -32,4 +32,18 @@ public:
 	/** Tint used for this city's region on the world map. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "City")
 	FLinearColor MapColor = FLinearColor(0.2f, 0.5f, 0.9f, 1.f);
+
+	/**
+	 * Minimum number of streets to place from this city's pool on a new game.
+	 * Clamped to the number of available streets if the pool is smaller.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Generation")
+	int32 MinStreets = 4;
+
+	/**
+	 * Maximum number of streets to place from this city's pool on a new game.
+	 * Actual count is a random value in [MinStreets, MaxStreets].
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Generation")
+	int32 MaxStreets = 8;
 };

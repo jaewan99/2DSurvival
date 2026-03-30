@@ -46,6 +46,11 @@ void UMapWidget::BuildMap()
 	AllDefs.Add(Start->StreetID, Start);
 	Queue.Enqueue(Start);
 
+	// Track how many streets have already been placed at each integer column so that
+	// multiple exits from the same street in the same direction get a small fractional
+	// offset (e.g. 0, +0.6, +1.2 ...) instead of stacking on top of each other.
+	TMap<int32, int32> ColumnOccupancy; // integer column → count already placed there
+
 	while (!Queue.IsEmpty())
 	{
 		UStreetDefinition* Street;
@@ -54,19 +59,27 @@ void UMapWidget::BuildMap()
 
 		for (const FStreetExitLink& Exit : Street->Exits)
 		{
-			if (!Exit.Destination) continue;
+			UStreetDefinition* DestDef = SM->ResolveExitDestination(Street, Exit.ExitID);
+			if (!DestDef) continue;
+
 			if (Exit.Layout == EExitLayout::Building)
 			{
 				// Buildings are labels on their parent node, not separate map nodes.
-				AllDefs.FindOrAdd(Exit.Destination->StreetID, Exit.Destination);
+				AllDefs.FindOrAdd(DestDef->StreetID, DestDef);
 				continue;
 			}
-			if (GridX.Contains(Exit.Destination->StreetID)) continue;
+			if (GridX.Contains(DestDef->StreetID)) continue;
 
-			const float NextX = X + (Exit.Layout == EExitLayout::AdjacentRight ? 1.f : -1.f);
-			GridX.Add(Exit.Destination->StreetID, NextX);
-			AllDefs.Add(Exit.Destination->StreetID, Exit.Destination);
-			Queue.Enqueue(Exit.Destination);
+			const float Dir    = (Exit.Layout == EExitLayout::AdjacentRight) ? 1.f : -1.f;
+			const int32 IntCol = FMath::RoundToInt(X + Dir);
+			int32& Count       = ColumnOccupancy.FindOrAdd(IntCol);
+			// Spread multiple streets at the same integer column by 0.6 increments.
+			const float NextX  = IntCol + Count * Dir * 0.6f;
+			++Count;
+
+			GridX.Add(DestDef->StreetID, NextX);
+			AllDefs.Add(DestDef->StreetID, DestDef);
+			Queue.Enqueue(DestDef);
 		}
 	}
 
@@ -139,12 +152,14 @@ void UMapWidget::BuildMap()
 
 		for (const FStreetExitLink& Exit : (*DefPtr)->Exits)
 		{
-			if (!Exit.Destination || Exit.Layout != EExitLayout::AdjacentRight) continue;
-			if (!NodeCenters.Contains(KV.Key) || !NodeCenters.Contains(Exit.Destination->StreetID)) continue;
+			if (Exit.Layout != EExitLayout::AdjacentRight) continue;
+			UStreetDefinition* DestDef = SM->ResolveExitDestination(*DefPtr, Exit.ExitID);
+			if (!DestDef) continue;
+			if (!NodeCenters.Contains(KV.Key) || !NodeCenters.Contains(DestDef->StreetID)) continue;
 
-			const bool bHwy = (*DefPtr)->bIsHighway || Exit.Destination->bIsHighway;
+			const bool bHwy = (*DefPtr)->bIsHighway || DestDef->bIsHighway;
 			auto& Lines = bHwy ? HighwayLines : ConnectionLines;
-			Lines.Add({ NodeCenters[KV.Key], NodeCenters[Exit.Destination->StreetID] });
+			Lines.Add({ NodeCenters[KV.Key], NodeCenters[DestDef->StreetID] });
 		}
 	}
 }

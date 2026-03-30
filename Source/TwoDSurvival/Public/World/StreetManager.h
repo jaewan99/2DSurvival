@@ -8,6 +8,7 @@
 #include "StreetManager.generated.h"
 
 class ULevelStreamingDynamic;
+class UTwoDSurvivalSaveGame;
 
 // Fired when the active street/building changes — UStreetHUDWidget binds this to refresh arrows.
 DECLARE_MULTICAST_DELEGATE(FOnStreetChanged);
@@ -69,6 +70,28 @@ public:
 	/** Called by LoadGame to restore visited streets from save data. */
 	void RestoreVisitedStreets(const TSet<FName>& Saved) { VisitedStreetIDs = Saved; }
 
+	/**
+	 * Resolves the destination street for a given exit on the given street.
+	 * First checks the exit's hard-wired Destination; if null, checks the runtime
+	 * generated graph. Returns null if the exit is blocked or unknown.
+	 */
+	UStreetDefinition* ResolveExitDestination(UStreetDefinition* Street, FName ExitID) const;
+
+	/**
+	 * Returns true if the current street has a resolvable (non-blocked) exit with this ID.
+	 * Used by StreetHUDWidget to decide whether to show directional arrows.
+	 */
+	bool HasResolvableExit(FName ExitID) const;
+
+	/** Looks up a UStreetDefinition by its StreetID (from the scanned asset map). */
+	UStreetDefinition* FindStreetByID(FName StreetID) const;
+
+	/** Serialize the current runtime graph into a save game object. */
+	void SaveGraphToSaveGame(UTwoDSurvivalSaveGame* Save) const;
+
+	/** Restore the runtime graph from a save game object (skips generation). */
+	void RestoreGraphFromSaveGame(const UTwoDSurvivalSaveGame* Save);
+
 	/** The street the session started on (used as BFS root for map layout). */
 	UFUNCTION(BlueprintCallable, Category = "Map")
 	UStreetDefinition* GetStartingStreet() const { return StartingStreetDef; }
@@ -118,6 +141,26 @@ private:
 	// ── Transition type ────────────────────────────────────────────────────────
 	enum class ETransitionType : uint8 { Street, EnterBuilding, ExitBuilding };
 	ETransitionType PendingTransitionType = ETransitionType::Street;
+
+	// ── Runtime city graph ─────────────────────────────────────────────────────
+	// Generated once per new game, then saved/restored. Maps StreetID → (ExitID → ToStreetID).
+	TMap<FName, TMap<FName, FName>> GeneratedGraph;
+
+	// All scanned UStreetDefinition assets, keyed by StreetID.
+	UPROPERTY()
+	TMap<FName, TObjectPtr<UStreetDefinition>> AllStreetDefsMap;
+
+	bool bCityGenerated = false;
+
+	/** Scan all UStreetDefinition assets into AllStreetDefsMap via AssetRegistry. */
+	void ScanAllStreetDefs();
+
+	/**
+	 * Scan all city street defs via AssetRegistry, shuffle each city's pool,
+	 * pick MinStreets–MaxStreets streets per city, and wire Left/Right connections.
+	 * Called once on first game start (no saved graph).
+	 */
+	void GenerateCityGraph();
 
 	// ── Internal helpers ───────────────────────────────────────────────────────
 	void LoadStreet(UStreetDefinition* Street, FVector WorldOffset);

@@ -10,6 +10,26 @@
 #include "Combat/StatusEffectTypes.h"       // FActiveStatusEffect
 #include "TwoDSurvivalSaveGame.generated.h"
 
+/**
+ * One edge in the runtime street graph.
+ * Stores FromStreetID → ExitID → ToStreetID so the graph can be rebuilt on load
+ * without re-running the random generation.
+ */
+USTRUCT()
+struct FSavedStreetConnection
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FName FromStreetID;
+
+	UPROPERTY()
+	FName ExitID;
+
+	UPROPERTY()
+	FName ToStreetID;
+};
+
 /** Serialized representation of one player-placed actor. */
 USTRUCT()
 struct FPlacedActorSaveData
@@ -173,4 +193,14 @@ public:
 	// Ghost actors (bIsGhost=true) are excluded.
 	UPROPERTY()
 	TArray<FPlacedActorSaveData> PlacedActors;
+
+	// --- Street graph ---
+	// Runtime-generated street connections (FromStreetID → ExitID → ToStreetID).
+	// Only populated after the first GenerateCityGraph() call or on save.
+	UPROPERTY()
+	TArray<FSavedStreetConnection> SavedStreetGraph;
+
+	/** True once the city graph has been generated and saved at least once. */
+	UPROPERTY()
+	bool bStreetGraphGenerated = false;
 };

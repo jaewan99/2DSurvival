@@ -1023,9 +1023,13 @@ void ABaseCharacter::SaveGame_Implementation()
 	SaveObj->SavedFatigue = NeedsComponent->GetNeedValue(ENeedType::Fatigue);
 	SaveObj->SavedMood    = NeedsComponent->GetMood();
 
-	// Visited streets
+	// Visited streets + street graph
 	UStreetManager* SM = GetWorld()->GetGameInstance()->GetSubsystem<UStreetManager>();
-	if (SM) SaveObj->VisitedStreetIDs = SM->GetVisitedStreets();
+	if (SM)
+	{
+		SaveObj->VisitedStreetIDs = SM->GetVisitedStreets();
+		SM->SaveGraphToSaveGame(SaveObj);
+	}
 
 	// NPC trades — collect completed trade IDs from all NPC actors in the world.
 	SaveObj->CompletedNPCTrades.Empty();
@@ -1202,9 +1206,13 @@ void ABaseCharacter::LoadGame_Implementation()
 	NeedsComponent->SetNeedValue(ENeedType::Fatigue, SaveObj->SavedFatigue);
 	NeedsComponent->SetMood(SaveObj->SavedMood);
 
-	// Restore visited streets
+	// Restore visited streets + street graph
 	UStreetManager* SM = GetWorld()->GetGameInstance()->GetSubsystem<UStreetManager>();
-	if (SM) SM->RestoreVisitedStreets(SaveObj->VisitedStreetIDs);
+	if (SM)
+	{
+		SM->RestoreVisitedStreets(SaveObj->VisitedStreetIDs);
+		SM->RestoreGraphFromSaveGame(SaveObj);
+	}
 
 	// Restore NPC trade states.
 	TArray<AActor*> AllNPCs;

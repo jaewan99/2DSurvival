@@ -50,9 +50,9 @@ void UStreetHUDWidget::RefreshArrows()
 {
 	UStreetManager* SM = GetGameInstance() ? GetGameInstance()->GetSubsystem<UStreetManager>() : nullptr;
 
-	const bool bHasLeft  = SM && SM->CurrentStreet && SM->CurrentStreet->GetExit(FName("Left"))  != nullptr && SM->CurrentStreet->GetExit(FName("Left"))->Destination  != nullptr;
-	const bool bHasRight = SM && SM->CurrentStreet && SM->CurrentStreet->GetExit(FName("Right")) != nullptr && SM->CurrentStreet->GetExit(FName("Right"))->Destination != nullptr;
-	const bool bHasUp    = SM && SM->CurrentStreet && SM->CurrentStreet->GetExit(FName("Up"))    != nullptr && SM->CurrentStreet->GetExit(FName("Up"))->Destination    != nullptr;
+	const bool bHasLeft  = SM && SM->HasResolvableExit(FName("Left"));
+	const bool bHasRight = SM && SM->HasResolvableExit(FName("Right"));
+	const bool bHasUp    = SM && SM->HasResolvableExit(FName("Up"));
 
 	if (ArrowLeft)  ArrowLeft->SetVisibility(bHasLeft  ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (ArrowRight) ArrowRight->SetVisibility(bHasRight ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
